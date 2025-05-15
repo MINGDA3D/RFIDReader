@@ -389,12 +389,15 @@ class RFIDReaderApp(QMainWindow):
         
         ports = serial.tools.list_ports.comports()
         for port in ports:
+            # 排除 COM1
+            if port.device.upper() == "COM1":
+                continue
             self.port_combo.addItem(port.device)
             
         if self.port_combo.count() == 0:
-            self.log_panel.add_log("未找到可用串口")
+            self.log_panel.add_log("未找到可用串口 (已排除 COM1)")
         else:
-            self.log_panel.add_log(f"找到 {self.port_combo.count()} 个可用串口")
+            self.log_panel.add_log(f"找到 {self.port_combo.count()} 个可用串口 (已排除 COM1)")
             
     def toggle_connection(self):
         """切换连接状态"""
