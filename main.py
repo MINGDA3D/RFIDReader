@@ -7,14 +7,14 @@ from datetime import datetime
 import serial
 import serial.tools.list_ports
 
-from PyQt5.QtWidgets import (
+from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QPushButton, QLabel, QComboBox, QLineEdit, QFormLayout, 
     QSpinBox, QDoubleSpinBox, QTextEdit, QGroupBox, QFrame, 
-    QMessageBox, QSplitter
+    QMessageBox, QSplitter, QScrollBar
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QSize
-from PyQt5.QtGui import QFont, QColor, QIcon, QPalette
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
+from PyQt6.QtGui import QFont, QColor, QIcon, QPalette
 
 # 导入自定义RFID协议模块
 from rfid_protocol import RFIDProtocol
@@ -183,10 +183,6 @@ class RFIDReaderApp(QMainWindow):
         self.setup_header()
         main_layout.addWidget(self.header_widget)
         
-        # 连接操作区
-        self.setup_connection_panel()
-        main_layout.addWidget(self.connection_widget)
-        
         # 内容区 (表单和日志)
         content_layout = QVBoxLayout()
         content_layout.setContentsMargins(20, 20, 20, 20)
@@ -204,6 +200,10 @@ class RFIDReaderApp(QMainWindow):
         content_widget = QWidget()
         content_widget.setLayout(content_layout)
         main_layout.addWidget(content_widget)
+        
+        # 连接操作区 - 移到日志面板创建之后
+        self.setup_connection_panel()
+        main_layout.insertWidget(1, self.connection_widget)
         
     def setup_header(self):
         """设置顶部栏"""
@@ -249,308 +249,226 @@ class RFIDReaderApp(QMainWindow):
         refresh_btn.clicked.connect(self.refresh_ports)
         
         # 连接/断开按钮
-        self.connect_btn = QPushButton("连接读写器")
-        self.connect_btn.setFixedWidth(120)
-        self.connect_btn.setStyleSheet(
-            "QPushButton {background-color: #1DADE5; color: white; border-radius: 4px; padding: 6px;}"
-            "QPushButton:hover {background-color: #189DCF;}"
-        )
+        self.connect_btn = QPushButton("连接")
+        self.connect_btn.setFixedWidth(80)
         self.connect_btn.clicked.connect(self.toggle_connection)
         
-        # 状态指示
-        self.status_label = QLabel("状态：● 未连接")
-        self.status_label.setStyleSheet("color: #FF0000;")
+        # 状态标签
+        self.status_label = QLabel("未连接")
+        self.status_label.setStyleSheet("color: #FF5252;")
         
+        # 添加到布局
         connection_layout.addWidget(port_label)
         connection_layout.addWidget(self.port_combo)
         connection_layout.addWidget(baud_label)
         connection_layout.addWidget(self.baud_combo)
         connection_layout.addWidget(refresh_btn)
         connection_layout.addWidget(self.connect_btn)
-        connection_layout.addSpacing(20)
         connection_layout.addWidget(self.status_label)
         connection_layout.addStretch()
         
+        # 添加读写按钮
+        read_btn = QPushButton("读取标签")
+        read_btn.setFixedWidth(100)
+        read_btn.clicked.connect(self.read_tag)
+        
+        write_btn = QPushButton("写入标签")
+        write_btn.setFixedWidth(100)
+        write_btn.clicked.connect(self.write_tag)
+        
+        connection_layout.addWidget(read_btn)
+        connection_layout.addWidget(write_btn)
+        
     def setup_tag_form(self):
-        """设置标签信息表单区"""
+        """设置标签信息表单"""
         self.form_group_box = QGroupBox("标签信息")
-        self.form_group_box.setStyleSheet(
-            "QGroupBox {background-color: white; border-radius: 8px; border: 1px solid #DDDDDD; margin-top: 20px;}"
-            "QGroupBox::title {subcontrol-origin: margin; left: 10px; padding: 0 5px;}"
-        )
-        
         form_layout = QFormLayout()
-        form_layout.setContentsMargins(20, 30, 20, 20)
-        form_layout.setSpacing(15)
-        form_layout.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        form_layout.setFieldGrowthPolicy(QFormLayout.AllNonFixedFieldsGrow)
+        form_layout.setContentsMargins(20, 30, 20, 30)
+        form_layout.setSpacing(20)
         
-        # 版本号
-        self.version_input = QLineEdit()
-        self.version_input.setFixedWidth(300)
-        form_layout.addRow(QLabel("版本号:"), self.version_input)
+        # 标签ID
+        self.tag_id_edit = QLineEdit()
+        self.tag_id_edit.setReadOnly(True)
+        self.tag_id_edit.setStyleSheet("background-color: #F3F3F3;")
         
-        # 厂商
-        self.manufacturer_combo = QComboBox()
-        self.manufacturer_combo.setFixedWidth(300)
-        self.manufacturer_combo.addItems(["ACME", "SuperFilament", "BestPLA", "PremiumPrint"])
-        self.manufacturer_combo.setEditable(True)
-        form_layout.addRow(QLabel("厂商:"), self.manufacturer_combo)
+        # 用户名
+        self.user_name_edit = QLineEdit()
         
-        # 耗材名称
-        self.material_name_input = QLineEdit()
-        self.material_name_input.setFixedWidth(300)
-        form_layout.addRow(QLabel("耗材名称:"), self.material_name_input)
+        # 用户ID
+        self.user_id_edit = QLineEdit()
         
-        # 颜色名称
-        self.color_name_input = QLineEdit()
-        self.color_name_input.setFixedWidth(300)
-        form_layout.addRow(QLabel("颜色名称:"), self.color_name_input)
+        # 部门
+        self.department_edit = QLineEdit()
         
-        # 直径(mm)
-        self.diameter_input = QDoubleSpinBox()
-        self.diameter_input.setFixedWidth(120)
-        self.diameter_input.setRange(0.1, 10.0)
-        self.diameter_input.setSingleStep(0.05)
-        self.diameter_input.setValue(1.75)
-        self.diameter_input.setDecimals(2)
-        form_layout.addRow(QLabel("直径(mm):"), self.diameter_input)
+        # 积分字段
+        self.points_spin = QSpinBox()
+        self.points_spin.setRange(0, 10000)
+        self.points_spin.setSingleStep(100)
         
-        # 重量(g)
-        self.weight_input = QSpinBox()
-        self.weight_input.setFixedWidth(120)
-        self.weight_input.setRange(0, 10000)
-        self.weight_input.setSingleStep(50)
-        self.weight_input.setValue(1000)
-        form_layout.addRow(QLabel("重量(g):"), self.weight_input)
+        # 余额字段
+        self.balance_spin = QDoubleSpinBox()
+        self.balance_spin.setRange(0, 10000)
+        self.balance_spin.setSingleStep(10)
+        self.balance_spin.setPrefix("¥ ")
+        self.balance_spin.setDecimals(2)
         
-        # 打印温度(℃)
-        self.print_temp_input = QSpinBox()
-        self.print_temp_input.setFixedWidth(120)
-        self.print_temp_input.setRange(160, 300)
-        self.print_temp_input.setSingleStep(5)
-        self.print_temp_input.setValue(215)
-        form_layout.addRow(QLabel("打印温度(℃):"), self.print_temp_input)
+        # 发行日期
+        self.issue_date_edit = QLineEdit()
         
-        # 热床温度(℃)
-        self.bed_temp_input = QSpinBox()
-        self.bed_temp_input.setFixedWidth(120)
-        self.bed_temp_input.setRange(0, 150)
-        self.bed_temp_input.setSingleStep(5)
-        self.bed_temp_input.setValue(60)
-        form_layout.addRow(QLabel("热床温度(℃):"), self.bed_temp_input)
+        # 到期日期
+        self.expire_date_edit = QLineEdit()
         
-        # 密度(g/cm³)
-        self.density_input = QDoubleSpinBox()
-        self.density_input.setFixedWidth(120)
-        self.density_input.setRange(0.1, 10.0)
-        self.density_input.setSingleStep(0.01)
-        self.density_input.setValue(1.24)
-        self.density_input.setDecimals(2)
-        form_layout.addRow(QLabel("密度(g/cm³):"), self.density_input)
+        # 附加信息
+        self.additional_info_edit = QTextEdit()
+        self.additional_info_edit.setMaximumHeight(100)
         
-        # 按钮组
-        button_layout = QHBoxLayout()
-        button_layout.setContentsMargins(0, 10, 0, 0)
-        button_layout.setSpacing(10)
+        # 添加字段到表单
+        form_layout.addRow(QLabel("标签ID:"), self.tag_id_edit)
+        form_layout.addRow(QLabel("用户名:"), self.user_name_edit)
+        form_layout.addRow(QLabel("用户ID:"), self.user_id_edit)
+        form_layout.addRow(QLabel("部门:"), self.department_edit)
+        form_layout.addRow(QLabel("积分:"), self.points_spin)
+        form_layout.addRow(QLabel("余额:"), self.balance_spin)
+        form_layout.addRow(QLabel("发行日期:"), self.issue_date_edit)
+        form_layout.addRow(QLabel("到期日期:"), self.expire_date_edit)
+        form_layout.addRow(QLabel("附加信息:"), self.additional_info_edit)
         
-        # 读取按钮
-        self.read_btn = QPushButton("读取标签")
-        self.read_btn.setFixedWidth(120)
-        self.read_btn.setStyleSheet(
-            "QPushButton {background-color: #1DADE5; color: white; border-radius: 4px; padding: 8px;}"
-            "QPushButton:hover {background-color: #189DCF;}"
-        )
-        self.read_btn.clicked.connect(self.read_tag)
-        
-        # 写入按钮
-        self.write_btn = QPushButton("写入标签")
-        self.write_btn.setFixedWidth(120)
-        self.write_btn.setStyleSheet(
-            "QPushButton {background-color: #4CAF50; color: white; border-radius: 4px; padding: 8px;}"
-            "QPushButton:hover {background-color: #43A047;}"
-        )
-        self.write_btn.clicked.connect(self.write_tag)
-        
-        button_layout.addStretch()
-        button_layout.addWidget(self.read_btn)
-        button_layout.addWidget(self.write_btn)
-        
-        # 添加按钮到表单布局
-        form_layout.addRow("", button_layout)
-        
+        # 设置表单布局
         self.form_group_box.setLayout(form_layout)
         
     def setup_log_panel(self):
-        """设置日志输出区"""
-        log_group = QGroupBox("日志输出")
-        log_group.setStyleSheet(
-            "QGroupBox {background-color: white; border-radius: 8px; border: 1px solid #DDDDDD; margin-top: 10px;}"
-            "QGroupBox::title {subcontrol-origin: margin; left: 10px; padding: 0 5px;}"
-        )
-        
-        log_layout = QVBoxLayout(log_group)
-        log_layout.setContentsMargins(10, 20, 10, 10)
-        
+        """设置日志面板"""
         self.log_panel = LogPanel()
-        self.log_panel.setFixedHeight(200)
+        self.log_panel.setMaximumHeight(200)
         
-        log_layout.addWidget(self.log_panel)
-        
-        return log_group
+        # 添加初始日志
+        self.log_panel.add_log("RFID 读写器管理软件已启动")
+        self.log_panel.add_log("请连接RFID读写器以开始操作")
         
     def refresh_ports(self):
         """刷新可用串口列表"""
         self.port_combo.clear()
         
-        # 获取可用串口列表
-        ports = list(serial.tools.list_ports.comports())
-        
+        ports = serial.tools.list_ports.comports()
         for port in ports:
             self.port_combo.addItem(port.device)
             
-        if not ports:
-            self.add_log("未检测到串口设备")
+        if self.port_combo.count() == 0:
+            self.log_panel.add_log("未找到可用串口")
         else:
-            self.add_log(f"检测到 {len(ports)} 个串口设备")
+            self.log_panel.add_log(f"找到 {self.port_combo.count()} 个可用串口")
             
     def toggle_connection(self):
-        """切换连接/断开状态"""
-        if not self.reader_thread.is_running:
-            # 连接读写器
-            port = self.port_combo.currentText()
-            baud_rate = int(self.baud_combo.currentText())
-            
-            if not port:
-                QMessageBox.warning(self, "警告", "请选择串口")
-                return
-                
-            success = self.reader_thread.connect_reader(port, baud_rate)
-            
-            if success:
-                self.connect_btn.setText("断开连接")
-                self.connect_btn.setStyleSheet(
-                    "QPushButton {background-color: #CCCCCC; color: black; border-radius: 4px; padding: 6px;}"
-                    "QPushButton:hover {background-color: #BBBBBB;}"
-                )
-                self.port_combo.setEnabled(False)
-                self.baud_combo.setEnabled(False)
-                
-        else:
+        """切换连接状态"""
+        if self.reader_thread.is_running:
             # 断开连接
             self.reader_thread.disconnect_reader()
-            self.connect_btn.setText("连接读写器")
-            self.connect_btn.setStyleSheet(
-                "QPushButton {background-color: #1DADE5; color: white; border-radius: 4px; padding: 6px;}"
-                "QPushButton:hover {background-color: #189DCF;}"
-            )
-            self.port_combo.setEnabled(True)
-            self.baud_combo.setEnabled(True)
+            self.connect_btn.setText("连接")
+        else:
+            # 连接设备
+            port = self.port_combo.currentText()
+            if not port:
+                QMessageBox.warning(self, "错误", "请先选择一个串口")
+                return
+                
+            baud_rate = int(self.baud_combo.currentText())
             
+            # 尝试连接
+            success = self.reader_thread.connect_reader(port, baud_rate)
+            if success:
+                self.connect_btn.setText("断开")
+                
     def update_status(self, connected, message):
         """更新连接状态"""
         if connected:
-            self.status_label.setText(f"状态：● {message}")
+            self.status_label.setText("已连接")
             self.status_label.setStyleSheet("color: #4CAF50;")
         else:
-            self.status_label.setText(f"状态：● {message}")
-            self.status_label.setStyleSheet("color: #FF0000;")
+            self.status_label.setText("未连接")
+            self.status_label.setStyleSheet("color: #FF5252;")
             
     def add_log(self, message):
-        """添加日志消息"""
+        """添加日志"""
         self.log_panel.add_log(message)
         
     def read_tag(self):
-        """读取标签信息"""
-        if not self.reader_thread.is_running:
-            QMessageBox.warning(self, "警告", "请先连接读写器")
-            return
-            
+        """读取标签"""
         self.reader_thread.read_tag()
         
     def write_tag(self):
-        """写入标签信息"""
-        if not self.reader_thread.is_running:
-            QMessageBox.warning(self, "警告", "请先连接读写器")
-            return
-            
-        # 获取表单数据
+        """写入标签"""
+        # 收集表单数据
         tag_data = {
-            "version": self.version_input.text(),
-            "manufacturer": self.manufacturer_combo.currentText(),
-            "material_name": self.material_name_input.text(),
-            "color_name": self.color_name_input.text(),
-            "diameter": self.diameter_input.value(),
-            "weight": self.weight_input.value(),
-            "print_temp": self.print_temp_input.value(),
-            "bed_temp": self.bed_temp_input.value(),
-            "density": self.density_input.value()
+            'user_name': self.user_name_edit.text(),
+            'user_id': self.user_id_edit.text(),
+            'department': self.department_edit.text(),
+            'points': self.points_spin.value(),
+            'balance': self.balance_spin.value(),
+            'issue_date': self.issue_date_edit.text(),
+            'expire_date': self.expire_date_edit.text(),
+            'additional_info': self.additional_info_edit.toPlainText()
         }
         
-        # 数据验证
-        if not tag_data["version"]:
-            QMessageBox.warning(self, "警告", "版本号不能为空")
+        # 验证必填字段
+        if not tag_data['user_name'] or not tag_data['user_id']:
+            QMessageBox.warning(self, "验证失败", "用户名和用户ID为必填项")
             return
             
-        if not tag_data["manufacturer"]:
-            QMessageBox.warning(self, "警告", "厂商不能为空")
-            return
-            
-        if not tag_data["material_name"]:
-            QMessageBox.warning(self, "警告", "耗材名称不能为空")
-            return
-            
-        # 写入标签
-        self.reader_thread.write_tag(tag_data)
+        # 确认写入
+        reply = QMessageBox.question(
+            self,
+            "确认写入",
+            "确定要写入标签数据吗？此操作将覆盖标签上的现有数据。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
         
+        if reply == QMessageBox.StandardButton.Yes:
+            self.reader_thread.write_tag(tag_data)
+            
     def update_form_data(self, data):
         """更新表单数据"""
-        if "version" in data:
-            self.version_input.setText(data["version"])
+        # 更新标签ID
+        if 'tag_id' in data:
+            self.tag_id_edit.setText(data['tag_id'])
             
-        if "manufacturer" in data:
-            index = self.manufacturer_combo.findText(data["manufacturer"])
-            if index >= 0:
-                self.manufacturer_combo.setCurrentIndex(index)
-            else:
-                self.manufacturer_combo.setEditText(data["manufacturer"])
-                
-        if "material_name" in data:
-            self.material_name_input.setText(data["material_name"])
+        # 更新用户信息
+        if 'user_name' in data:
+            self.user_name_edit.setText(data['user_name'])
+        
+        if 'user_id' in data:
+            self.user_id_edit.setText(data['user_id'])
             
-        if "color_name" in data:
-            self.color_name_input.setText(data["color_name"])
+        if 'department' in data:
+            self.department_edit.setText(data['department'])
             
-        if "diameter" in data:
-            self.diameter_input.setValue(data["diameter"])
+        # 更新积分和余额
+        if 'points' in data:
+            self.points_spin.setValue(int(data['points']))
             
-        if "weight" in data:
-            self.weight_input.setValue(data["weight"])
+        if 'balance' in data:
+            self.balance_spin.setValue(float(data['balance']))
             
-        if "print_temp" in data:
-            self.print_temp_input.setValue(data["print_temp"])
+        # 更新日期信息
+        if 'issue_date' in data:
+            self.issue_date_edit.setText(data['issue_date'])
             
-        if "bed_temp" in data:
-            self.bed_temp_input.setValue(data["bed_temp"])
+        if 'expire_date' in data:
+            self.expire_date_edit.setText(data['expire_date'])
             
-        if "density" in data:
-            self.density_input.setValue(data["density"])
+        # 更新附加信息
+        if 'additional_info' in data:
+            self.additional_info_edit.setPlainText(data['additional_info'])
 
 
 if __name__ == "__main__":
-    # 创建应用
     app = QApplication(sys.argv)
     
-    # 设置样式
+    # 设置应用样式
     app.setStyle("Fusion")
     
     # 创建并显示主窗口
     window = RFIDReaderApp()
     window.show()
     
-    # 添加初始日志
-    window.add_log("应用程序已启动")
-    window.add_log("请连接RFID读写器")
-    
-    # 启动应用
-    sys.exit(app.exec_()) 
+    sys.exit(app.exec()) 

@@ -11,6 +11,7 @@ import json
 import random
 import binascii
 import struct
+import datetime
 
 class RFIDProtocol:
     """RFID读写器通信协议处理类"""
@@ -188,16 +189,24 @@ class RFIDProtocol:
             
     def _get_sample_tag_data(self):
         """获取示例标签数据"""
+        # 生成随机的6位十六进制数作为标签ID
+        tag_id = ''.join([f"{random.randint(0, 15):X}" for _ in range(6)])
+        
+        # 计算当前日期以及一年后日期
+        today = datetime.date.today()
+        issue_date = today.strftime("%Y-%m-%d")
+        expire_date = (today.replace(year=today.year + 1)).strftime("%Y-%m-%d")
+        
         sample_data = {
-            "version": f"V{random.randint(1, 5)}.{random.randint(0, 9)}",
-            "manufacturer": random.choice(["ACME", "SuperFilament", "BestPLA", "PremiumPrint"]),
-            "material_name": random.choice(["PLA", "PLA+", "ABS", "PETG", "TPU"]),
-            "color_name": random.choice(["黑色", "白色", "深空灰", "银灰", "蓝色", "红色"]),
-            "diameter": round(random.uniform(1.65, 1.85), 2),
-            "weight": random.choice([250, 500, 1000, 2000]),
-            "print_temp": random.randint(190, 240),
-            "bed_temp": random.randint(50, 80),
-            "density": round(random.uniform(1.2, 1.3), 2)
+            "tag_id": tag_id,
+            "user_name": random.choice(["张三", "李四", "王五", "赵六", "钱七"]),
+            "user_id": f"UID{random.randint(10000, 99999)}",
+            "department": random.choice(["技术部", "市场部", "人事部", "财务部", "行政部"]),
+            "points": random.randint(0, 5000),
+            "balance": round(random.uniform(0, 500), 2),
+            "issue_date": issue_date,
+            "expire_date": expire_date,
+            "additional_info": "这是一个示例RFID标签数据"
         }
         
         return sample_data
@@ -217,15 +226,14 @@ if __name__ == "__main__":
         
     # 测试写入
     test_data = {
-        "version": "V2.0",
-        "manufacturer": "TestMFG",
-        "material_name": "TestPLA",
-        "color_name": "测试颜色",
-        "diameter": 1.75,
-        "weight": 1000,
-        "print_temp": 215,
-        "bed_temp": 60,
-        "density": 1.25
+        "user_name": "测试用户",
+        "user_id": "UID12345",
+        "department": "测试部门",
+        "points": 1000,
+        "balance": 100.50,
+        "issue_date": "2023-06-15",
+        "expire_date": "2024-06-14",
+        "additional_info": "这是测试数据"
     }
     
     success, message = protocol.write_tag(test_data)

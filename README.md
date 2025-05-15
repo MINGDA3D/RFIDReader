@@ -9,9 +9,14 @@
 - 写入标签信息
 - 实时日志显示
 
+## 系统要求
+
+- **Python版本**: 3.6 - 3.10 (不支持Python 3.11及以上版本)
+- Windows 7/8/10/11
+
 ## 安装
 
-1. 确保已安装Python 3.6+
+1. 确保已安装Python 3.6-3.10
 2. 安装所需依赖：
 
 ```bash
@@ -39,6 +44,16 @@ python run.py
 python test_mode.py
 ```
 
+### 兼容性问题
+
+如果遇到兼容性问题，请运行：
+
+```bash
+compatibility_guide.bat
+```
+
+这将提供详细的兼容性信息和解决方案。
+
 ## 项目结构
 
 - `main.py` - 主程序文件
@@ -48,6 +63,7 @@ python test_mode.py
 - `requirements.txt` - 依赖列表
 - `start.bat` - Windows启动批处理文件
 - `start_test_mode.bat` - 测试模式启动批处理文件
+- `compatibility_guide.bat` - 兼容性指南
 
 ## 技术说明
 

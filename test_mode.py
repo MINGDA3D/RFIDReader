@@ -10,6 +10,8 @@ import time
 import random
 import threading
 from datetime import datetime
+import sys
+import types
 
 class VirtualSerialPort:
     """
@@ -80,7 +82,7 @@ class VirtualSerialPort:
             "version": f"V{random.randint(1, 5)}.{random.randint(0, 9)}",
             "manufacturer": random.choice(["ACME", "SuperFilament", "BestPLA", "PremiumPrint"]),
             "material_name": random.choice(["PLA", "PLA+", "ABS", "PETG", "TPU"]),
-            "color_name": random.choice(["黑色", "白色", "深空灰", "银灰", "蓝色", "红色"]),
+            "color_name": random.choice(["BLACK", "WHITE", "DARK SPACE GRAY", "SILVER GRAY", "BLUE", "RED"]),
             "diameter": round(random.uniform(1.65, 1.85), 2),
             "weight": random.choice([250, 500, 1000, 2000]),
             "print_temp": random.randint(190, 240),
@@ -121,43 +123,39 @@ class VirtualSerialPort:
 
 def enable_test_mode():
     """启用测试模式，将替代serial模块"""
-    import sys
-    import builtins
+    # 创建模拟的serial模块
+    mock_serial = types.ModuleType('serial')
+    mock_serial.Serial = VirtualSerialPort
     
-    # 替换serial模块
-    class MockSerial:
-        """模拟serial模块"""
+    # 创建模拟的serial.tools模块
+    mock_tools = types.ModuleType('serial.tools')
+    sys.modules['serial.tools'] = mock_tools
+    
+    # 创建模拟的serial.tools.list_ports模块
+    mock_list_ports = types.ModuleType('serial.tools.list_ports')
+    
+    # 添加comports函数
+    def comports():
+        class MockPort:
+            def __init__(self, device, description):
+                self.device = device
+                self.description = description
         
-        def __init__(self):
-            self.Serial = VirtualSerialPort
-            
-        def __getattr__(self, name):
-            if name == "tools":
-                return self
-                
-        class tools:
-            """模拟serial.tools模块"""
-            
-            class list_ports:
-                """模拟serial.tools.list_ports模块"""
-                
-                @staticmethod
-                def comports():
-                    """返回虚拟COM端口列表"""
-                    class MockPort:
-                        def __init__(self, device, description):
-                            self.device = device
-                            self.description = description
-                            
-                    # 返回3个虚拟端口
-                    return [
-                        MockPort("COM1", "Virtual Serial Port 1"),
-                        MockPort("COM2", "Virtual Serial Port 2"),
-                        MockPort("COM3", "Virtual Serial Port 3")
-                    ]
-                    
+        return [
+            MockPort("COM1", "Virtual Serial Port 1"),
+            MockPort("COM2", "Virtual Serial Port 2"),
+            MockPort("COM3", "Virtual Serial Port 3")
+        ]
+    
+    mock_list_ports.comports = comports
+    sys.modules['serial.tools.list_ports'] = mock_list_ports
+    
+    # 设置模块关系
+    mock_serial.tools = mock_tools
+    mock_tools.list_ports = mock_list_ports
+    
     # 替换模块
-    sys.modules["serial"] = MockSerial()
+    sys.modules['serial'] = mock_serial
     
     # 输出测试模式信息
     print("="*50)
