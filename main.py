@@ -304,12 +304,14 @@ class RFIDReaderApp(QMainWindow):
         # Tag Version
         self.tag_version_spin = QSpinBox()
         self.tag_version_spin.setRange(0, 9999) # e.g., 1000 for 1.000
+        self.tag_version_spin.setValue(1000)  # 设置默认值
         self.tag_version_spin.setToolTip("RFID标签数据格式版本 (例如: 1000 代表 1.000)")
         form_layout.addRow(QLabel("标签版本:"), self.tag_version_spin)
 
         # Filament Manufacturer
         self.filament_manufacturer_edit = QLineEdit()
         self.filament_manufacturer_edit.setMaxLength(16) # Max 16 bytes, assuming mostly ASCII
+        self.filament_manufacturer_edit.setText("MINGDA 3D")  # 设置默认值
         self.filament_manufacturer_edit.setToolTip("耗材制造商 (最多16字符)")
         form_layout.addRow(QLabel("耗材制造商:"), self.filament_manufacturer_edit)
 
@@ -328,15 +330,16 @@ class RFIDReaderApp(QMainWindow):
         # Diameter (Target)
         self.diameter_target_spin = QSpinBox()
         self.diameter_target_spin.setRange(1000, 3000) # e.g., 1750 for 1.750mm
+        self.diameter_target_spin.setValue(1750)  # 设置默认值
         self.diameter_target_spin.setSuffix(" µm")
         self.diameter_target_spin.setToolTip("目标直径 (微米, 例如: 1750 代表 1.750mm)")
         form_layout.addRow(QLabel("目标直径 (µm):"), self.diameter_target_spin)
 
         # Weight (Nominal, grams)
-        self.weight_nominal_spin = QSpinBox()
-        self.weight_nominal_spin.setRange(1, 10000) # e.g., 1000 for 1kg
-        self.weight_nominal_spin.setSuffix(" g")
-        self.weight_nominal_spin.setToolTip("标称重量 (克, 例如: 1000 代表 1kg)")
+        self.weight_nominal_spin = QComboBox() # 更改为 QComboBox
+        self.weight_nominal_spin.addItems(["1000", "3000", "5000"]) # 添加选项
+        self.weight_nominal_spin.setCurrentText("1000") # 设置默认选项
+        self.weight_nominal_spin.setToolTip("标称重量 (克)")
         form_layout.addRow(QLabel("标称重量 (g):"), self.weight_nominal_spin)
 
         # Print Temp (C)
@@ -429,7 +432,7 @@ class RFIDReaderApp(QMainWindow):
             'material_name': self.material_name_edit.text(),
             'color_name': self.color_name_edit.text(),
             'diameter_target': self.diameter_target_spin.value(),
-            'weight_nominal': self.weight_nominal_spin.value(),
+            'weight_nominal': int(self.weight_nominal_spin.currentText()), # 从 QComboBox 获取并转为 int
             'print_temp': self.print_temp_spin.value(),
             'bed_temp': self.bed_temp_spin.value(),
             'density': self.density_spin.value()
@@ -476,7 +479,7 @@ class RFIDReaderApp(QMainWindow):
             self.diameter_target_spin.setValue(int(data['diameter_target']))
             
         if 'weight_nominal' in data:
-            self.weight_nominal_spin.setValue(int(data['weight_nominal']))
+            self.weight_nominal_spin.setCurrentText(str(data['weight_nominal'])) # 设置 QComboBox 的值
             
         if 'print_temp' in data:
             self.print_temp_spin.setValue(int(data['print_temp']))
