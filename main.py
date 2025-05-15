@@ -131,13 +131,13 @@ class RFIDReaderThread(QThread):
             
             if success:
                 self.data_received.emit(result)
-                self.log_message.emit(f"成功{prefix}读取通道 {channel} 标签内容")
+                self.log_message.emit(f"成功{prefix}读取通道 {channel+1} 标签内容")
                 return True
             else:
-                self.log_message.emit(f"{prefix}读取通道 {channel} 标签失败: {result}")
+                self.log_message.emit(f"{prefix}读取通道 {channel+1} 标签失败: {result}")
                 return False
         except Exception as e:
-            self.log_message.emit(f"{prefix}读取通道 {channel} 标签时出错: {str(e)}")
+            self.log_message.emit(f"{prefix}读取通道 {channel+1} 标签时出错: {str(e)}")
             return False
 
     def read_tag(self, channel):
@@ -146,7 +146,7 @@ class RFIDReaderThread(QThread):
             self.log_message.emit("读写器未连接，无法读取标签")
             return False
         
-        self.log_message.emit(f"正在读取通道 {channel} 标签...")
+        self.log_message.emit(f"正在读取通道 {channel+1} 标签...")
         return self._execute_read_tag_once(channel, is_continuous_op=False)
             
     def _execute_write_tag_once(self, data, channel, is_continuous_op=False):
@@ -157,13 +157,13 @@ class RFIDReaderThread(QThread):
             success, message = self.rfid_protocol.write_tag(data)
             
             if success:
-                self.log_message.emit(f"成功{prefix}写入通道 {channel} 标签: {message}")
+                self.log_message.emit(f"成功{prefix}写入通道 {channel+1} 标签: {message}")
                 return True
             else:
-                self.log_message.emit(f"{prefix}写入通道 {channel} 标签失败: {message}")
+                self.log_message.emit(f"{prefix}写入通道 {channel+1} 标签失败: {message}")
                 return False
         except Exception as e:
-            self.log_message.emit(f"{prefix}写入通道 {channel} 标签时出错: {str(e)}")
+            self.log_message.emit(f"{prefix}写入通道 {channel+1} 标签时出错: {str(e)}")
             return False
 
     def write_tag(self, data, channel):
@@ -172,7 +172,7 @@ class RFIDReaderThread(QThread):
             self.log_message.emit("读写器未连接，无法写入标签")
             return False
             
-        self.log_message.emit(f"正在写入通道 {channel} 标签...")
+        self.log_message.emit(f"正在写入通道 {channel+1} 标签...")
         return self._execute_write_tag_once(data, channel, is_continuous_op=False)
 
     def start_continuous_read(self, channel):
@@ -187,7 +187,7 @@ class RFIDReaderThread(QThread):
         self.is_performing_continuous_action = True
         self.continuous_mode = 'read'
         self.continuous_action_channel = channel
-        self.log_message.emit(f"开始连续读取通道 {channel}...")
+        self.log_message.emit(f"开始连续读取通道 {channel+1}...")
         self.continuous_action_status_changed.emit(True, 'read')
 
     def start_continuous_write(self, data, channel):
@@ -203,7 +203,7 @@ class RFIDReaderThread(QThread):
         self.continuous_mode = 'write'
         self.continuous_action_data = data
         self.continuous_action_channel = channel
-        self.log_message.emit(f"开始连续写入通道 {channel}...")
+        self.log_message.emit(f"开始连续写入通道 {channel+1}...")
         self.continuous_action_status_changed.emit(True, 'write')
 
     def stop_continuous_action(self):
