@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
     QPushButton, QLabel, QComboBox, QLineEdit, QFormLayout, 
     QSpinBox, QDoubleSpinBox, QTextEdit, QGroupBox, QFrame, 
-    QMessageBox, QSplitter, QScrollBar
+    QMessageBox, QSplitter, QScrollBar, QCheckBox
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
 from PyQt6.QtGui import QFont, QColor, QIcon, QPalette
@@ -46,6 +46,7 @@ class RFIDReaderThread(QThread):
     status_changed = pyqtSignal(bool, str)
     data_received = pyqtSignal(dict)
     log_message = pyqtSignal(str)
+    continuous_action_status_changed = pyqtSignal(bool, str) # active, mode ('read', 'write', or '')
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -54,6 +55,13 @@ class RFIDReaderThread(QThread):
         self.port_name = ""
         self.baud_rate = 115200
         self.rfid_protocol = RFIDProtocol()
+        
+        # 连续操作相关状态
+        self.is_performing_continuous_action = False
+        self.continuous_mode = None  # 'read' or 'write'
+        self.continuous_action_channel = None
+        self.continuous_action_data = None
+        self.CONTINUOUS_INTERVAL = 0.5  # 连续操作的间隔时间（秒）
         
     def connect_reader(self, port_name, baud_rate=115200):
         """连接RFID读写器"""
@@ -90,6 +98,7 @@ class RFIDReaderThread(QThread):
     def disconnect_reader(self):
         """断开RFID读写器连接"""
         self.is_running = False
+        self.stop_continuous_action() #确保停止连续操作
         if self.serial_port and self.serial_port.is_open:
             self.serial_port.close()
             self.status_changed.emit(False, "已断开连接")
@@ -98,55 +107,115 @@ class RFIDReaderThread(QThread):
     def run(self):
         """线程主循环"""
         while self.is_running:
-            # 这里只是示例，实际应用需要根据RFID读写器的协议进行通信
-            time.sleep(0.1)
+            if self.is_performing_continuous_action and self.serial_port and self.serial_port.is_open:
+                try:
+                    if self.continuous_mode == 'read':
+                        self._execute_read_tag_once(self.continuous_action_channel, is_continuous_op=True)
+                    elif self.continuous_mode == 'write':
+                        if self.continuous_action_data: # 确保有数据可写
+                            self._execute_write_tag_once(self.continuous_action_data, self.continuous_action_channel, is_continuous_op=True)
+                    time.sleep(self.CONTINUOUS_INTERVAL)
+                except Exception as e:
+                    self.log_message.emit(f"连续操作中发生错误: {str(e)}")
+                    self.stop_continuous_action() # 发生错误时停止连续操作
+            else:
+                # 即使不进行连续操作，也保持线程的响应性
+                time.sleep(0.1)
             
-    def read_tag(self, channel):
-        """读取标签信息"""
-        if not self.serial_port or not self.serial_port.is_open:
-            self.log_message.emit("读写器未连接，无法读取标签")
-            return False
-            
+    def _execute_read_tag_once(self, channel, is_continuous_op=False):
+        """执行单次标签读取的核心逻辑"""
+        prefix = "连续" if is_continuous_op else ""
+        # "正在读取..." 日志由调用方 (单次读取方法或开始连续读取方法) 处理
         try:
-            self.log_message.emit(f"正在读取通道 {channel} 标签...")
-            
-            # 使用RFID协议模块读取标签
-            success, result = self.rfid_protocol.read_tag(channel)
+            success, result = self.rfid_protocol.read_tag()
             
             if success:
                 self.data_received.emit(result)
-                self.log_message.emit(f"成功读取通道 {channel} 标签内容")
+                self.log_message.emit(f"成功{prefix}读取通道 {channel} 标签内容")
                 return True
             else:
-                self.log_message.emit(f"读取通道 {channel} 标签失败: {result}")
+                self.log_message.emit(f"{prefix}读取通道 {channel} 标签失败: {result}")
                 return False
-                
         except Exception as e:
-            self.log_message.emit(f"读取通道 {channel} 标签出错: {str(e)}")
+            self.log_message.emit(f"{prefix}读取通道 {channel} 标签时出错: {str(e)}")
             return False
+
+    def read_tag(self, channel):
+        """读取标签信息 (单次操作)"""
+        if not self.serial_port or not self.serial_port.is_open:
+            self.log_message.emit("读写器未连接，无法读取标签")
+            return False
+        
+        self.log_message.emit(f"正在读取通道 {channel} 标签...")
+        return self._execute_read_tag_once(channel, is_continuous_op=False)
             
+    def _execute_write_tag_once(self, data, channel, is_continuous_op=False):
+        """执行单次标签写入的核心逻辑"""
+        prefix = "连续" if is_continuous_op else ""
+        # "正在写入..." 日志由调用方 (单次写入方法或开始连续写入方法) 处理
+        try:
+            success, message = self.rfid_protocol.write_tag(data)
+            
+            if success:
+                self.log_message.emit(f"成功{prefix}写入通道 {channel} 标签: {message}")
+                return True
+            else:
+                self.log_message.emit(f"{prefix}写入通道 {channel} 标签失败: {message}")
+                return False
+        except Exception as e:
+            self.log_message.emit(f"{prefix}写入通道 {channel} 标签时出错: {str(e)}")
+            return False
+
     def write_tag(self, data, channel):
-        """写入标签信息"""
+        """写入标签信息 (单次操作)"""
         if not self.serial_port or not self.serial_port.is_open:
             self.log_message.emit("读写器未连接，无法写入标签")
             return False
             
-        try:
-            self.log_message.emit(f"正在写入通道 {channel} 标签...")
-            
-            # 使用RFID协议模块写入标签
-            success, message = self.rfid_protocol.write_tag(data, channel)
-            
-            if success:
-                self.log_message.emit(message)
-                return True
-            else:
-                self.log_message.emit(f"写入通道 {channel} 标签失败: {message}")
-                return False
-                
-        except Exception as e:
-            self.log_message.emit(f"写入通道 {channel} 标签出错: {str(e)}")
-            return False
+        self.log_message.emit(f"正在写入通道 {channel} 标签...")
+        return self._execute_write_tag_once(data, channel, is_continuous_op=False)
+
+    def start_continuous_read(self, channel):
+        """开始连续读取"""
+        if not self.serial_port or not self.serial_port.is_open:
+            self.log_message.emit("读写器未连接，无法开始连续读取")
+            return
+
+        if self.is_performing_continuous_action and self.continuous_mode == 'write':
+            self.stop_continuous_action() # 如果正在连续写入，则停止
+
+        self.is_performing_continuous_action = True
+        self.continuous_mode = 'read'
+        self.continuous_action_channel = channel
+        self.log_message.emit(f"开始连续读取通道 {channel}...")
+        self.continuous_action_status_changed.emit(True, 'read')
+
+    def start_continuous_write(self, data, channel):
+        """开始连续写入"""
+        if not self.serial_port or not self.serial_port.is_open:
+            self.log_message.emit("读写器未连接，无法开始连续写入")
+            return
+
+        if self.is_performing_continuous_action and self.continuous_mode == 'read':
+            self.stop_continuous_action() # 如果正在连续读取，则停止
+
+        self.is_performing_continuous_action = True
+        self.continuous_mode = 'write'
+        self.continuous_action_data = data
+        self.continuous_action_channel = channel
+        self.log_message.emit(f"开始连续写入通道 {channel}...")
+        self.continuous_action_status_changed.emit(True, 'write')
+
+    def stop_continuous_action(self):
+        """停止所有连续操作"""
+        if self.is_performing_continuous_action:
+            mode_text = "读取" if self.continuous_mode == 'read' else "写入"
+            self.log_message.emit(f"停止连续{mode_text}操作")
+            self.is_performing_continuous_action = False
+            self.continuous_mode = None
+            self.continuous_action_channel = None
+            self.continuous_action_data = None
+            self.continuous_action_status_changed.emit(False, '')
 
 
 class RFIDReaderApp(QMainWindow):
@@ -167,6 +236,7 @@ class RFIDReaderApp(QMainWindow):
         self.reader_thread.status_changed.connect(self.update_status)
         self.reader_thread.data_received.connect(self.update_form_data)
         self.reader_thread.log_message.connect(self.add_log)
+        self.reader_thread.continuous_action_status_changed.connect(self.on_continuous_action_status_changed)
         
         # 设置主界面
         self.setup_ui()
@@ -283,18 +353,32 @@ class RFIDReaderApp(QMainWindow):
         connection_layout.addStretch()
         
         # 添加读写按钮
-        read_btn = QPushButton("读取标签")
-        read_btn.setStyleSheet("color: black;")
-        read_btn.setFixedWidth(100)
-        read_btn.clicked.connect(self.read_tag)
+        self.continuous_read_checkbox = QCheckBox("连续读取")
+        self.continuous_read_checkbox.setStyleSheet("color: black;")
+        self.continuous_read_checkbox.stateChanged.connect(
+            lambda state: self.handle_continuous_checkbox_changed(state, 'read')
+        )
         
-        write_btn = QPushButton("写入标签")
-        write_btn.setStyleSheet("color: black;")
-        write_btn.setFixedWidth(100)
-        write_btn.clicked.connect(self.write_tag)
+        self.read_button = QPushButton("读取标签")
+        self.read_button.setStyleSheet("color: black;")
+        self.read_button.setFixedWidth(100)
+        self.read_button.clicked.connect(self.read_tag)
         
-        connection_layout.addWidget(read_btn)
-        connection_layout.addWidget(write_btn)
+        self.continuous_write_checkbox = QCheckBox("连续写入")
+        self.continuous_write_checkbox.setStyleSheet("color: black;")
+        self.continuous_write_checkbox.stateChanged.connect(
+            lambda state: self.handle_continuous_checkbox_changed(state, 'write')
+        )
+        
+        self.write_button = QPushButton("写入标签")
+        self.write_button.setStyleSheet("color: black;")
+        self.write_button.setFixedWidth(100)
+        self.write_button.clicked.connect(self.write_tag)
+
+        connection_layout.addWidget(self.continuous_read_checkbox)
+        connection_layout.addWidget(self.read_button)
+        connection_layout.addWidget(self.continuous_write_checkbox)
+        connection_layout.addWidget(self.write_button)
         
     def setup_tag_form(self):
         """设置标签信息表单"""
@@ -432,10 +516,84 @@ class RFIDReaderApp(QMainWindow):
         """添加日志"""
         self.log_panel.add_log(message)
         
+    def handle_continuous_checkbox_changed(self, state, checkbox_type):
+        """处理连续操作复选框状态变化"""
+        source_checkbox = None
+        other_checkbox = None
+
+        if checkbox_type == 'read':
+            source_checkbox = self.continuous_read_checkbox
+            other_checkbox = self.continuous_write_checkbox
+        elif checkbox_type == 'write':
+            source_checkbox = self.continuous_write_checkbox
+            other_checkbox = self.continuous_read_checkbox
+
+        if source_checkbox.isChecked():
+            if other_checkbox.isChecked():
+                other_checkbox.setChecked(False) # 确保互斥
+            # 如果当前有其他类型的连续操作正在进行，则停止它
+            if self.reader_thread.is_performing_continuous_action and \
+               self.reader_thread.continuous_mode != checkbox_type:
+                self.reader_thread.stop_continuous_action()
+        else: # 复选框被取消选中
+            # 如果当前选中的是此类型的连续操作，则停止它
+            if self.reader_thread.is_performing_continuous_action and \
+               self.reader_thread.continuous_mode == checkbox_type:
+                self.reader_thread.stop_continuous_action()
+
+    def on_continuous_action_status_changed(self, is_active, mode):
+        """当连续操作状态改变时调用"""
+        if is_active:
+            if mode == 'read':
+                self.read_button.setText("停止读取")
+                self.write_button.setText("写入标签") # 重置另一个按钮
+                self.continuous_read_checkbox.setChecked(True) # 确保勾选框状态一致
+                # 禁止另一个连续操作
+                self.continuous_write_checkbox.setEnabled(False)
+                self.write_button.setEnabled(False)
+                self.read_button.setEnabled(True)
+            elif mode == 'write':
+                self.write_button.setText("停止写入")
+                self.read_button.setText("读取标签") # 重置另一个按钮
+                self.continuous_write_checkbox.setChecked(True) # 确保勾选框状态一致
+                # 禁止另一个连续操作
+                self.continuous_read_checkbox.setEnabled(False)
+                self.read_button.setEnabled(False)
+                self.write_button.setEnabled(True)
+        else: # 不再活动
+            self.read_button.setText("读取标签")
+            self.write_button.setText("写入标签")
+            self.continuous_read_checkbox.setEnabled(True)
+            self.continuous_write_checkbox.setEnabled(True)
+            self.read_button.setEnabled(True)
+            self.write_button.setEnabled(True)
+            # 当操作停止时，不要主动取消复选框的选中状态，由用户控制或互斥逻辑控制
+            # if self.continuous_read_checkbox.isChecked() and self.reader_thread.continuous_mode != 'read':
+            # self.continuous_read_checkbox.setChecked(False) # Potentially problematic
+            # if self.continuous_write_checkbox.isChecked() and self.reader_thread.continuous_mode != 'write':
+            # self.continuous_write_checkbox.setChecked(False) # Potentially problematic
+        
     def read_tag(self):
         """读取标签"""
+        if not self.reader_thread.is_running:
+            self.add_log("读写器未连接")
+            QMessageBox.warning(self, "提示", "请先连接读写器")
+            return
+
         channel_number = self.channel_combo.currentIndex() # 获取当前选择的索引 (0-7)
-        self.reader_thread.read_tag(channel_number)
+
+        # 情况1：如果当前正在连续读取，则点击按钮表示停止
+        if self.reader_thread.is_performing_continuous_action and self.reader_thread.continuous_mode == 'read':
+            self.reader_thread.stop_continuous_action()
+        # 情况2：如果"连续读取"复选框被选中，则开始连续读取
+        elif self.continuous_read_checkbox.isChecked():
+            self.reader_thread.start_continuous_read(channel_number)
+        # 情况3：执行单次读取
+        else:
+            # 如果有任何其他连续操作正在进行（比如连续写入），先停止它
+            if self.reader_thread.is_performing_continuous_action:
+                self.reader_thread.stop_continuous_action()
+            self.reader_thread.read_tag(channel_number)
         
     def write_tag(self):
         """写入标签"""
@@ -491,18 +649,37 @@ class RFIDReaderApp(QMainWindow):
         # 打印温度和热床温度，QSpinBox 已经有范围限制，一般不需要额外检查是否为空或为0 (除非0是无效值)
         # 标称重量是从 QComboBox 获取的，也会有值
 
-        # 确认写入
-        reply = QMessageBox.question(
-            self,
-            "确认写入",
-            "确定要写入标签数据吗？此操作将覆盖标签上的现有数据。",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        
-        if reply == QMessageBox.StandardButton.Yes:
-            channel_number = self.channel_combo.currentIndex() # 获取当前选择的索引 (0-7)
-            self.reader_thread.write_tag(tag_data, channel_number)
+        channel_number = self.channel_combo.currentIndex()
+
+        # 情况1：如果当前正在连续写入，则点击按钮表示停止
+        if self.reader_thread.is_performing_continuous_action and self.reader_thread.continuous_mode == 'write':
+            self.reader_thread.stop_continuous_action()
+        # 情况2：如果"连续写入"复选框被选中，则开始连续写入
+        elif self.continuous_write_checkbox.isChecked():
+            reply = QMessageBox.question(
+                self,
+                "确认连续写入",
+                "确定要开始连续写入标签数据吗？此操作将循环覆盖标签上的现有数据，直到手动停止。",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.reader_thread.start_continuous_write(tag_data, channel_number)
+        # 情况3：执行单次写入
+        else:
+            # 如果有任何其他连续操作正在进行（比如连续读取），先停止它
+            if self.reader_thread.is_performing_continuous_action:
+                self.reader_thread.stop_continuous_action()
+                
+            reply = QMessageBox.question(
+                self,
+                "确认写入",
+                "确定要写入标签数据吗？此操作将覆盖标签上的现有数据。",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                self.reader_thread.write_tag(tag_data, channel_number)
             
     def update_form_data(self, data):
         """更新表单数据"""
