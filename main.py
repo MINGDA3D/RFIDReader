@@ -223,6 +223,88 @@ class RFIDReaderApp(QMainWindow):
     
     APP_VERSION = "v0.0.1"  # 添加软件版本号
 
+    # 定义耗材模板数据
+    DEFAULT_MATERIAL_TEMPLATES = {
+        "选择耗材模板...": {}, # 添加一个默认的空选项
+        "PLA": {
+            'tag_version': 1000,
+            'filament_manufacturer': "MINGDA 3D",
+            'material_name': "PLA",
+            'color_name': "White",
+            'diameter_target': 1750,
+            'weight_nominal': "1000",
+            'print_temp': 210,
+            'bed_temp': 60,
+            'density': 1240
+        },
+        "ABS": {
+            'tag_version': 1000,
+            'filament_manufacturer': "MINGDA 3D",
+            'material_name': "ABS",
+            'color_name': "Black",
+            'diameter_target': 1750,
+            'weight_nominal': "1000",
+            'print_temp': 240,
+            'bed_temp': 100,
+            'density': 1040
+        },
+        "PETG": {
+            'tag_version': 1000,
+            'filament_manufacturer': "MINGDA 3D",
+            'material_name': "PETG",
+            'color_name': "Transparent",
+            'diameter_target': 1750,
+            'weight_nominal': "1000",
+            'print_temp': 230,
+            'bed_temp': 70,
+            'density': 1270
+        },
+        "PET-CF": {
+            'tag_version': 1000,
+            'filament_manufacturer': "MINGDA 3D",
+            'material_name': "PET-CF",
+            'color_name': "Carbon Black",
+            'diameter_target': 1750,
+            'weight_nominal': "1000",
+            'print_temp': 280,
+            'bed_temp': 80,
+            'density': 1300 # 示例值，请按实际修改
+        },
+        "ASA": {
+            'tag_version': 1000,
+            'filament_manufacturer': "MINGDA 3D",
+            'material_name': "ASA",
+            'color_name': "Natural",
+            'diameter_target': 1750,
+            'weight_nominal': "1000",
+            'print_temp': 250,
+            'bed_temp': 90,
+            'density': 1070
+        },
+        "HtPA": { # High Temperature PA
+            'tag_version': 1000,
+            'filament_manufacturer': "MINGDA 3D",
+            'material_name': "HtPA",
+            'color_name': "Natural",
+            'diameter_target': 1750,
+            'weight_nominal': "1000",
+            'print_temp': 290,
+            'bed_temp': 110,
+            'density': 1150 # 示例值
+        },
+        "TPU": {
+            'tag_version': 1000,
+            'filament_manufacturer': "MINGDA 3D",
+            'material_name': "TPU",
+            'color_name': "Flexible Black",
+            'diameter_target': 1750,
+            'weight_nominal': "1000",
+            'print_temp': 220,
+            'bed_temp': 50,
+            'density': 1210
+        }
+    }
+
     def __init__(self):
         super().__init__()
         
@@ -393,6 +475,13 @@ class RFIDReaderApp(QMainWindow):
         self.channel_combo.setCurrentText("通道1")
         self.channel_combo.setToolTip("选择读写器通道 (1-8)")
         form_layout.addRow(QLabel("通道号:"), self.channel_combo)
+
+        # 新增：耗材模板选择
+        self.material_template_combo = QComboBox()
+        self.material_template_combo.addItems(self.DEFAULT_MATERIAL_TEMPLATES.keys())
+        self.material_template_combo.currentTextChanged.connect(self.apply_material_template)
+        self.material_template_combo.setToolTip("选择一个耗材模板快速填充信息")
+        form_layout.addRow(QLabel("耗材模板:"), self.material_template_combo)
 
         # 新增字段根据用户提供的表格
         # Tag Version
@@ -683,6 +772,19 @@ class RFIDReaderApp(QMainWindow):
             
     def update_form_data(self, data):
         """更新表单数据"""
+        if not data: # 如果传入空数据 (例如 "选择耗材模板..." 选项)
+            # 可以选择清空表单或恢复默认值，这里暂时不清空，让用户自己操作
+            # self.tag_version_spin.setValue(1000) 
+            # self.filament_manufacturer_edit.setText("MINGDA 3D")
+            # self.material_name_edit.clear() 
+            # self.color_name_edit.clear()
+            # self.diameter_target_spin.setValue(1750)
+            # self.weight_nominal_spin.setCurrentText("1000")
+            # self.print_temp_spin.setValue(0) # Or a sensible default
+            # self.bed_temp_spin.setValue(0)   # Or a sensible default
+            # self.density_spin.setValue(0)    # Or a sensible default
+            return
+
         # 更新新的字段
         if 'tag_version' in data:
             self.tag_version_spin.setValue(int(data['tag_version']))
@@ -710,6 +812,16 @@ class RFIDReaderApp(QMainWindow):
             
         if 'density' in data:
             self.density_spin.setValue(int(data['density']))
+
+    def apply_material_template(self, material_name):
+        """根据选择的耗材模板名称填充表单"""
+        if material_name in self.DEFAULT_MATERIAL_TEMPLATES:
+            template_data = self.DEFAULT_MATERIAL_TEMPLATES[material_name]
+            if template_data: # 确保不是空的 "选择耗材模板..."
+                self.update_form_data(template_data)
+            # 如果template_data为空 (对应 "选择耗材模板...")，可以选择是否清空表单
+            # else:
+            #     self.update_form_data({}) # 传递空字典以触发清空逻辑 (如果已实现)
 
 
 if __name__ == "__main__":
