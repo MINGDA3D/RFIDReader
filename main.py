@@ -152,6 +152,8 @@ class RFIDReaderThread(QThread):
 class RFIDReaderApp(QMainWindow):
     """RFID读写器应用主窗口"""
     
+    APP_VERSION = "v0.0.1"  # 添加软件版本号
+
     def __init__(self):
         super().__init__()
         
@@ -219,7 +221,12 @@ class RFIDReaderApp(QMainWindow):
         app_name_label = QLabel("RFID 读写器管理软件")
         app_name_label.setStyleSheet("color: #FFFFFF; font-size: 18px; font-weight: bold;")
         
+        # 添加版本号标签
+        version_label = QLabel(f"{self.APP_VERSION}")
+        version_label.setStyleSheet("color: #FFFFFF; font-size: 15px; margin-top: 5px; margin-left: -3px;")
+
         header_layout.addWidget(app_name_label)
+        header_layout.addWidget(version_label) # 将版本号标签添加到应用名称后面
         header_layout.addStretch()
         
     def setup_connection_panel(self):
