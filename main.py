@@ -6,6 +6,7 @@ import time
 from datetime import datetime
 import serial
 import serial.tools.list_ports
+import re # 添加 re 模块导入
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
@@ -428,9 +429,9 @@ class RFIDReaderApp(QMainWindow):
         # 收集表单数据
         tag_data = {
             'tag_version': self.tag_version_spin.value(),
-            'filament_manufacturer': self.filament_manufacturer_edit.text(),
-            'material_name': self.material_name_edit.text(),
-            'color_name': self.color_name_edit.text(),
+            'filament_manufacturer': self.filament_manufacturer_edit.text().strip(), # 去除首尾空格
+            'material_name': self.material_name_edit.text().strip(), # 去除首尾空格
+            'color_name': self.color_name_edit.text().strip(), # 去除首尾空格
             'diameter_target': self.diameter_target_spin.value(),
             'weight_nominal': int(self.weight_nominal_spin.currentText()), # 从 QComboBox 获取并转为 int
             'print_temp': self.print_temp_spin.value(),
@@ -438,12 +439,45 @@ class RFIDReaderApp(QMainWindow):
             'density': self.density_spin.value()
         }
         
-        # 验证必填字段 (根据实际需求添加，目前假设所有字段都应有合理值，但不强制非空字符串)
-        # 例如，可以检查制造商或材料名称是否为空
-        if not tag_data['filament_manufacturer'] or not tag_data['material_name']:
-            QMessageBox.warning(self, "验证失败", "耗材制造商和材料名称不能为空")
+        # 定义校验函数
+        def is_valid_string_format(text):
+            return bool(re.fullmatch(r"[a-zA-Z0-9 ]*", text))
+
+        # 验证必填字段和格式
+        if not tag_data['filament_manufacturer']:
+            QMessageBox.warning(self, "验证失败", "耗材制造商不能为空")
+            return
+        if not is_valid_string_format(tag_data['filament_manufacturer']):
+            QMessageBox.warning(self, "验证失败", "耗材制造商只能包含大小写字母、数字和空格")
+            return
+
+        if not tag_data['material_name']:
+            QMessageBox.warning(self, "验证失败", "耗材名称不能为空")
+            return
+        if not is_valid_string_format(tag_data['material_name']):
+            QMessageBox.warning(self, "验证失败", "耗材名称只能包含大小写字母、数字和空格")
+            return
+
+        if not tag_data['color_name']:
+            QMessageBox.warning(self, "验证失败", "颜色名称不能为空")
+            return
+        if not is_valid_string_format(tag_data['color_name']):
+            QMessageBox.warning(self, "验证失败", "颜色名称只能包含大小写字母、数字和空格")
             return
             
+        # QSpinBox 和 QComboBox 通常会保证有值，但可以根据需要添加更严格的检查
+        # 例如，确保温度值在合理范围内（虽然SpinBox已经限制了范围）
+        if tag_data['diameter_target'] <= 0: # 直径必须大于0
+            QMessageBox.warning(self, "验证失败", "目标直径必须大于0")
+            return
+            
+        if tag_data['print_temp'] < 170:
+            QMessageBox.warning(self, "验证失败", "打印温度不能小于170°C")
+            return
+
+        # 打印温度和热床温度，QSpinBox 已经有范围限制，一般不需要额外检查是否为空或为0 (除非0是无效值)
+        # 标称重量是从 QComboBox 获取的，也会有值
+
         # 确认写入
         reply = QMessageBox.question(
             self,
