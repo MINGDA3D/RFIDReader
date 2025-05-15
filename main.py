@@ -260,8 +260,9 @@ class RFIDReaderApp(QMainWindow):
         self.connect_btn.clicked.connect(self.toggle_connection)
         
         # 状态标签
-        self.status_label = QLabel("未连接")
-        self.status_label.setStyleSheet("color: #FF5252;")
+        self.status_label = QLabel("状态： <font color='#FF5252' style='font-size:16pt;'>●</font> 未连接")
+        self.status_label.setStyleSheet("color: black; margin-top: -10px; margin-left: 10px;")
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignVCenter)
         
         # 添加到布局
         connection_layout.addWidget(port_label)
@@ -389,11 +390,9 @@ class RFIDReaderApp(QMainWindow):
     def update_status(self, connected, message):
         """更新连接状态"""
         if connected:
-            self.status_label.setText("已连接")
-            self.status_label.setStyleSheet("color: #4CAF50;")
+            self.status_label.setText("状态： <font color='#4CAF50' style='font-size:16pt;'>●</font> 已连接")
         else:
-            self.status_label.setText("未连接")
-            self.status_label.setStyleSheet("color: #FF5252;")
+            self.status_label.setText("状态： <font color='#FF5252' style='font-size:16pt;'>●</font> 未连接")
             
     def add_log(self, message):
         """添加日志"""
