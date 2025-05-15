@@ -232,24 +232,30 @@ class RFIDReaderApp(QMainWindow):
         
         # 端口选择下拉框
         port_label = QLabel("端口:")
+        port_label.setStyleSheet("color: black;")
         self.port_combo = QComboBox()
+        self.port_combo.setStyleSheet("color: black;")
         self.refresh_ports()
         self.port_combo.setMinimumWidth(150)
         
         # 波特率下拉框
         baud_label = QLabel("波特率:")
+        baud_label.setStyleSheet("color: black;")
         self.baud_combo = QComboBox()
+        self.baud_combo.setStyleSheet("color: black;")
         self.baud_combo.addItems(["9600", "19200", "38400", "57600", "115200"])
         self.baud_combo.setCurrentText("115200")
         self.baud_combo.setFixedWidth(100)
         
         # 刷新按钮
         refresh_btn = QPushButton("刷新")
+        refresh_btn.setStyleSheet("color: black;")
         refresh_btn.setFixedWidth(80)
         refresh_btn.clicked.connect(self.refresh_ports)
         
         # 连接/断开按钮
         self.connect_btn = QPushButton("连接")
+        self.connect_btn.setStyleSheet("color: black;")
         self.connect_btn.setFixedWidth(80)
         self.connect_btn.clicked.connect(self.toggle_connection)
         
@@ -269,10 +275,12 @@ class RFIDReaderApp(QMainWindow):
         
         # 添加读写按钮
         read_btn = QPushButton("读取标签")
+        read_btn.setStyleSheet("color: black;")
         read_btn.setFixedWidth(100)
         read_btn.clicked.connect(self.read_tag)
         
         write_btn = QPushButton("写入标签")
+        write_btn.setStyleSheet("color: black;")
         write_btn.setFixedWidth(100)
         write_btn.clicked.connect(self.write_tag)
         
