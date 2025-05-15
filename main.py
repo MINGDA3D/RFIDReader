@@ -293,54 +293,72 @@ class RFIDReaderApp(QMainWindow):
         self.form_group_box = QGroupBox("标签信息")
         form_layout = QFormLayout()
         form_layout.setContentsMargins(20, 30, 20, 30)
-        form_layout.setSpacing(20)
+        form_layout.setSpacing(15)
         
-        # 标签ID
+        # 标签ID (保持不变, 通常为只读的标签物理ID)
         self.tag_id_edit = QLineEdit()
         self.tag_id_edit.setReadOnly(True)
-        self.tag_id_edit.setStyleSheet("background-color: #F3F3F3;")
-        
-        # 用户名
-        self.user_name_edit = QLineEdit()
-        
-        # 用户ID
-        self.user_id_edit = QLineEdit()
-        
-        # 部门
-        self.department_edit = QLineEdit()
-        
-        # 积分字段
-        self.points_spin = QSpinBox()
-        self.points_spin.setRange(0, 10000)
-        self.points_spin.setSingleStep(100)
-        
-        # 余额字段
-        self.balance_spin = QDoubleSpinBox()
-        self.balance_spin.setRange(0, 10000)
-        self.balance_spin.setSingleStep(10)
-        self.balance_spin.setPrefix("¥ ")
-        self.balance_spin.setDecimals(2)
-        
-        # 发行日期
-        self.issue_date_edit = QLineEdit()
-        
-        # 到期日期
-        self.expire_date_edit = QLineEdit()
-        
-        # 附加信息
-        self.additional_info_edit = QTextEdit()
-        self.additional_info_edit.setMaximumHeight(100)
-        
-        # 添加字段到表单
         form_layout.addRow(QLabel("标签ID:"), self.tag_id_edit)
-        form_layout.addRow(QLabel("用户名:"), self.user_name_edit)
-        form_layout.addRow(QLabel("用户ID:"), self.user_id_edit)
-        form_layout.addRow(QLabel("部门:"), self.department_edit)
-        form_layout.addRow(QLabel("积分:"), self.points_spin)
-        form_layout.addRow(QLabel("余额:"), self.balance_spin)
-        form_layout.addRow(QLabel("发行日期:"), self.issue_date_edit)
-        form_layout.addRow(QLabel("到期日期:"), self.expire_date_edit)
-        form_layout.addRow(QLabel("附加信息:"), self.additional_info_edit)
+
+        # 新增字段根据用户提供的表格
+        # Tag Version
+        self.tag_version_spin = QSpinBox()
+        self.tag_version_spin.setRange(0, 9999) # e.g., 1000 for 1.000
+        self.tag_version_spin.setToolTip("RFID标签数据格式版本 (例如: 1000 代表 1.000)")
+        form_layout.addRow(QLabel("标签版本:"), self.tag_version_spin)
+
+        # Filament Manufacturer
+        self.filament_manufacturer_edit = QLineEdit()
+        self.filament_manufacturer_edit.setMaxLength(16) # Max 16 bytes, assuming mostly ASCII
+        self.filament_manufacturer_edit.setToolTip("耗材制造商 (最多16字符)")
+        form_layout.addRow(QLabel("耗材制造商:"), self.filament_manufacturer_edit)
+
+        # Material Name
+        self.material_name_edit = QLineEdit()
+        self.material_name_edit.setMaxLength(16) # Max 16 bytes
+        self.material_name_edit.setToolTip("材料名称 (例如: PLA, ABS, PETG, 最多16字符)")
+        form_layout.addRow(QLabel("材料名称:"), self.material_name_edit)
+
+        # Color Name
+        self.color_name_edit = QLineEdit()
+        self.color_name_edit.setMaxLength(32) # Max 32 bytes
+        self.color_name_edit.setToolTip("颜色名称 (最多32字符)")
+        form_layout.addRow(QLabel("颜色名称:"), self.color_name_edit)
+
+        # Diameter (Target)
+        self.diameter_target_spin = QSpinBox()
+        self.diameter_target_spin.setRange(1000, 3000) # e.g., 1750 for 1.750mm
+        self.diameter_target_spin.setSuffix(" µm")
+        self.diameter_target_spin.setToolTip("目标直径 (微米, 例如: 1750 代表 1.750mm)")
+        form_layout.addRow(QLabel("目标直径 (µm):"), self.diameter_target_spin)
+
+        # Weight (Nominal, grams)
+        self.weight_nominal_spin = QSpinBox()
+        self.weight_nominal_spin.setRange(1, 10000) # e.g., 1000 for 1kg
+        self.weight_nominal_spin.setSuffix(" g")
+        self.weight_nominal_spin.setToolTip("标称重量 (克, 例如: 1000 代表 1kg)")
+        form_layout.addRow(QLabel("标称重量 (g):"), self.weight_nominal_spin)
+
+        # Print Temp (C)
+        self.print_temp_spin = QSpinBox()
+        self.print_temp_spin.setRange(0, 400) # e.g., 210 for PLA
+        self.print_temp_spin.setSuffix(" °C")
+        self.print_temp_spin.setToolTip("推荐打印温度 (°C)")
+        form_layout.addRow(QLabel("打印温度 (°C):"), self.print_temp_spin)
+
+        # Bed Temp (C)
+        self.bed_temp_spin = QSpinBox()
+        self.bed_temp_spin.setRange(0, 150) # e.g., 60 for PLA
+        self.bed_temp_spin.setSuffix(" °C")
+        self.bed_temp_spin.setToolTip("推荐热床温度 (°C)")
+        form_layout.addRow(QLabel("热床温度 (°C):"), self.bed_temp_spin)
+        
+        # Density
+        self.density_spin = QSpinBox()
+        self.density_spin.setRange(0, 5000) # e.g., 1240 for 1.240 g/cm^3
+        self.density_spin.setToolTip("耗材密度 (µg/cm³, 例如: 1240 代表 1.240 g/cm³)")
+        # Suffix µg/cm³ might be tricky with special characters, could use QLabel instead or simple " (µg/cm³)" in label
+        form_layout.addRow(QLabel("密度 (µg/cm³):"), self.density_spin)
         
         # 设置表单布局
         self.form_group_box.setLayout(form_layout)
@@ -406,19 +424,21 @@ class RFIDReaderApp(QMainWindow):
         """写入标签"""
         # 收集表单数据
         tag_data = {
-            'user_name': self.user_name_edit.text(),
-            'user_id': self.user_id_edit.text(),
-            'department': self.department_edit.text(),
-            'points': self.points_spin.value(),
-            'balance': self.balance_spin.value(),
-            'issue_date': self.issue_date_edit.text(),
-            'expire_date': self.expire_date_edit.text(),
-            'additional_info': self.additional_info_edit.toPlainText()
+            'tag_version': self.tag_version_spin.value(),
+            'filament_manufacturer': self.filament_manufacturer_edit.text(),
+            'material_name': self.material_name_edit.text(),
+            'color_name': self.color_name_edit.text(),
+            'diameter_target': self.diameter_target_spin.value(),
+            'weight_nominal': self.weight_nominal_spin.value(),
+            'print_temp': self.print_temp_spin.value(),
+            'bed_temp': self.bed_temp_spin.value(),
+            'density': self.density_spin.value()
         }
         
-        # 验证必填字段
-        if not tag_data['user_name'] or not tag_data['user_id']:
-            QMessageBox.warning(self, "验证失败", "用户名和用户ID为必填项")
+        # 验证必填字段 (根据实际需求添加，目前假设所有字段都应有合理值，但不强制非空字符串)
+        # 例如，可以检查制造商或材料名称是否为空
+        if not tag_data['filament_manufacturer'] or not tag_data['material_name']:
+            QMessageBox.warning(self, "验证失败", "耗材制造商和材料名称不能为空")
             return
             
         # 确认写入
@@ -436,36 +456,36 @@ class RFIDReaderApp(QMainWindow):
     def update_form_data(self, data):
         """更新表单数据"""
         # 更新标签ID
-        if 'tag_id' in data:
-            self.tag_id_edit.setText(data['tag_id'])
+        if 'tag_id' in data: # Keep this if tag_id is still relevant (e.g. UID of the tag itself)
+            self.tag_id_edit.setText(str(data['tag_id'])) # Ensure it's a string
             
-        # 更新用户信息
-        if 'user_name' in data:
-            self.user_name_edit.setText(data['user_name'])
+        # 更新新的字段
+        if 'tag_version' in data:
+            self.tag_version_spin.setValue(int(data['tag_version']))
+            
+        if 'filament_manufacturer' in data:
+            self.filament_manufacturer_edit.setText(str(data['filament_manufacturer']))
         
-        if 'user_id' in data:
-            self.user_id_edit.setText(data['user_id'])
+        if 'material_name' in data:
+            self.material_name_edit.setText(str(data['material_name']))
             
-        if 'department' in data:
-            self.department_edit.setText(data['department'])
+        if 'color_name' in data:
+            self.color_name_edit.setText(str(data['color_name']))
             
-        # 更新积分和余额
-        if 'points' in data:
-            self.points_spin.setValue(int(data['points']))
+        if 'diameter_target' in data:
+            self.diameter_target_spin.setValue(int(data['diameter_target']))
             
-        if 'balance' in data:
-            self.balance_spin.setValue(float(data['balance']))
+        if 'weight_nominal' in data:
+            self.weight_nominal_spin.setValue(int(data['weight_nominal']))
             
-        # 更新日期信息
-        if 'issue_date' in data:
-            self.issue_date_edit.setText(data['issue_date'])
+        if 'print_temp' in data:
+            self.print_temp_spin.setValue(int(data['print_temp']))
             
-        if 'expire_date' in data:
-            self.expire_date_edit.setText(data['expire_date'])
+        if 'bed_temp' in data:
+            self.bed_temp_spin.setValue(int(data['bed_temp']))
             
-        # 更新附加信息
-        if 'additional_info' in data:
-            self.additional_info_edit.setPlainText(data['additional_info'])
+        if 'density' in data:
+            self.density_spin.setValue(int(data['density']))
 
 
 if __name__ == "__main__":
