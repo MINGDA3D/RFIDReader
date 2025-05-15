@@ -101,51 +101,51 @@ class RFIDReaderThread(QThread):
             # 这里只是示例，实际应用需要根据RFID读写器的协议进行通信
             time.sleep(0.1)
             
-    def read_tag(self):
+    def read_tag(self, channel):
         """读取标签信息"""
         if not self.serial_port or not self.serial_port.is_open:
             self.log_message.emit("读写器未连接，无法读取标签")
             return False
             
         try:
-            self.log_message.emit("正在读取标签...")
+            self.log_message.emit(f"正在读取通道 {channel} 标签...")
             
             # 使用RFID协议模块读取标签
-            success, result = self.rfid_protocol.read_tag()
+            success, result = self.rfid_protocol.read_tag(channel)
             
             if success:
                 self.data_received.emit(result)
-                self.log_message.emit("成功读取标签内容")
+                self.log_message.emit(f"成功读取通道 {channel} 标签内容")
                 return True
             else:
-                self.log_message.emit(f"读取标签失败: {result}")
+                self.log_message.emit(f"读取通道 {channel} 标签失败: {result}")
                 return False
                 
         except Exception as e:
-            self.log_message.emit(f"读取标签出错: {str(e)}")
+            self.log_message.emit(f"读取通道 {channel} 标签出错: {str(e)}")
             return False
             
-    def write_tag(self, data):
+    def write_tag(self, data, channel):
         """写入标签信息"""
         if not self.serial_port or not self.serial_port.is_open:
             self.log_message.emit("读写器未连接，无法写入标签")
             return False
             
         try:
-            self.log_message.emit("正在写入标签...")
+            self.log_message.emit(f"正在写入通道 {channel} 标签...")
             
             # 使用RFID协议模块写入标签
-            success, message = self.rfid_protocol.write_tag(data)
+            success, message = self.rfid_protocol.write_tag(data, channel)
             
             if success:
                 self.log_message.emit(message)
                 return True
             else:
-                self.log_message.emit(f"写入标签失败: {message}")
+                self.log_message.emit(f"写入通道 {channel} 标签失败: {message}")
                 return False
                 
         except Exception as e:
-            self.log_message.emit(f"写入标签出错: {str(e)}")
+            self.log_message.emit(f"写入通道 {channel} 标签出错: {str(e)}")
             return False
 
 
@@ -303,10 +303,12 @@ class RFIDReaderApp(QMainWindow):
         form_layout.setContentsMargins(20, 30, 20, 30)
         form_layout.setSpacing(15)
         
-        # 标签ID (保持不变, 通常为只读的标签物理ID)
-        self.tag_id_edit = QLineEdit()
-        self.tag_id_edit.setReadOnly(True)
-        form_layout.addRow(QLabel("标签ID:"), self.tag_id_edit)
+        # 通道号选择
+        self.channel_combo = QComboBox()
+        self.channel_combo.addItems([f"通道{i}" for i in range(1, 9)])
+        self.channel_combo.setCurrentText("通道1")
+        self.channel_combo.setToolTip("选择读写器通道 (1-8)")
+        form_layout.addRow(QLabel("通道号:"), self.channel_combo)
 
         # 新增字段根据用户提供的表格
         # Tag Version
@@ -432,7 +434,8 @@ class RFIDReaderApp(QMainWindow):
         
     def read_tag(self):
         """读取标签"""
-        self.reader_thread.read_tag()
+        channel_number = self.channel_combo.currentIndex() # 获取当前选择的索引 (0-7)
+        self.reader_thread.read_tag(channel_number)
         
     def write_tag(self):
         """写入标签"""
@@ -498,14 +501,11 @@ class RFIDReaderApp(QMainWindow):
         )
         
         if reply == QMessageBox.StandardButton.Yes:
-            self.reader_thread.write_tag(tag_data)
+            channel_number = self.channel_combo.currentIndex() # 获取当前选择的索引 (0-7)
+            self.reader_thread.write_tag(tag_data, channel_number)
             
     def update_form_data(self, data):
         """更新表单数据"""
-        # 更新标签ID
-        if 'tag_id' in data: # Keep this if tag_id is still relevant (e.g. UID of the tag itself)
-            self.tag_id_edit.setText(str(data['tag_id'])) # Ensure it's a string
-            
         # 更新新的字段
         if 'tag_version' in data:
             self.tag_version_spin.setValue(int(data['tag_version']))
