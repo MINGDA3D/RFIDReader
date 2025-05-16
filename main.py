@@ -401,6 +401,7 @@ class RFIDReaderApp(QMainWindow):
         
         # 设置窗口属性
         self.setWindowTitle("RFID 读写器管理软件")
+        self.setWindowIcon(QIcon("Resources/logo.svg")) # 设置应用图标
         self.setMinimumSize(1000, 700)
         self.resize(1440, 900)
         
