@@ -7,6 +7,8 @@ from datetime import datetime
 import serial
 import serial.tools.list_ports
 import re # 添加 re 模块导入
+import binascii # 添加 binascii 模块导入
+from read_rfid_tag import construct_read_command, parse_rfid_response # 从 read_rfid_tag.py 导入 parse_rfid_response
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
@@ -173,27 +175,54 @@ class RFIDReaderThread(QThread):
     def _execute_read_tag_once(self, channel, is_continuous_op=False):
         """执行单次标签读取的核心逻辑"""
         prefix = "连续" if is_continuous_op else ""
-        # "正在读取..." 日志由调用方 (单次读取方法或开始连续读取方法) 处理
+
+        # 构建并记录待发送的读取命令
+        command_to_send = construct_read_command(channel)
+        if command_to_send:
+            self.log_message.emit(f"准备发送读取命令 (通道 {channel + 1}): {binascii.hexlify(command_to_send).decode('ascii').upper()}")
+        else:
+            self.log_message.emit(f"错误: 无法为通道 {channel + 1} 构建读取命令。操作中止。")
+            return False
+
         try:
-            success, result = self.rfid_protocol.read_tag() # result 是原始字节数据或错误消息
+            # 调用 rfid_protocol 的 read_tag，传入 channel
+            # rfid_protocol.read_tag 现在内部也使用 construct_read_command 并发送
+            # 它返回 (True, raw_response_bytes) 或 (False, error_message)
+            success, result_from_protocol = self.rfid_protocol.read_tag(channel)
             
             if success:
-                if isinstance(result, bytes): # 确保 result 是字节串
-                    parsed_tag_data = self._parse_raw_tag_data(result)
-                    if parsed_tag_data: # 确保解析成功且数据非空
-                        self.data_received.emit(parsed_tag_data)
-                        self.log_message.emit(f"成功{prefix}读取通道 {channel+1} 标签内容并解析")
-                    else:
-                        self.log_message.emit(f"成功{prefix}读取通道 {channel+1}，但标签数据解析失败或为空")
-                    return True
+                if isinstance(result_from_protocol, bytes): # 确保是字节串
+                    raw_response_frame = result_from_protocol
+                    self.log_message.emit(f"接收到原始响应帧 (通道 {channel + 1}): {binascii.hexlify(raw_response_frame).decode('ascii').upper()}")
+
+                    # 使用从 read_rfid_tag.py 导入的 parse_rfid_response 解析原始帧
+                    tag_content_bytes = parse_rfid_response(raw_response_frame)
+                    
+                    if tag_content_bytes is not None: # parse_rfid_response 成功解析并提取了数据部分 (可能为空字节串)
+                        if tag_content_bytes: # 如果提取的数据部分不为空
+                            parsed_data_dict = self._parse_raw_tag_data(tag_content_bytes)
+                            if parsed_data_dict:
+                                self.data_received.emit(parsed_data_dict)
+                                self.log_message.emit(f"成功{prefix}读取通道 {channel+1}: 已解析标签内容。")
+                            else:
+                                self.log_message.emit(f"成功{prefix}读取通道 {channel+1}: 标签内容提取成功，但解析为字典失败。内容: {binascii.hexlify(tag_content_bytes).decode('ascii')}")
+                        else: # tag_content_bytes 是 b'' (例如，STA=0x00 但无数据内容)
+                            self.log_message.emit(f"成功{prefix}读取通道 {channel+1}: 响应成功，但标签数据内容为空。")
+                        return True # 操作成功，即使数据为空或解析字典失败，但协议层面成功
+                    else: # parse_rfid_response 返回 None (表示帧错误、校验失败、或STA指示无标签等)
+                          # parse_rfid_response 内部会打印具体原因
+                        self.log_message.emit(f"{prefix}读取通道 {channel+1}: 响应帧解析失败或指示无标签/错误。")
+                        return False # 操作失败
                 else:
-                    self.log_message.emit(f"{prefix}读取通道 {channel+1} 成功，但返回数据格式不正确: {type(result)}")
+                    # 这不应该发生，因为 rfid_protocol.read_tag(channel) 在成功时保证返回 bytes
+                    self.log_message.emit(f"{prefix}读取通道 {channel+1} 成功，但协议层返回数据类型非字节: {type(result_from_protocol)}")
                     return False
-            else:
-                self.log_message.emit(f"{prefix}读取通道 {channel+1} 标签失败: {result}") # result 是错误消息
+            else: # rfid_protocol.read_tag(channel) 返回 success = False
+                error_message_from_protocol = result_from_protocol
+                self.log_message.emit(f"{prefix}读取通道 {channel+1} 标签失败: {error_message_from_protocol}")
                 return False
         except Exception as e:
-            self.log_message.emit(f"{prefix}读取通道 {channel+1} 标签时出错: {str(e)}")
+            self.log_message.emit(f"{prefix}读取通道 {channel+1} 标签时发生顶层异常: {str(e)}")
             return False
 
     def read_tag(self, channel):
