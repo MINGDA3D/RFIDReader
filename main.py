@@ -9,6 +9,7 @@ import serial.tools.list_ports
 import re # 添加 re 模块导入
 import binascii # 添加 binascii 模块导入
 from read_rfid_tag import construct_read_command, parse_rfid_response # 从 read_rfid_tag.py 导入 parse_rfid_response
+from read_rfid_tag import construct_write_command 
 
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
@@ -239,7 +240,23 @@ class RFIDReaderThread(QThread):
     def _execute_write_tag_once(self, data, channel, is_continuous_op=False):
         """执行单次标签写入的核心逻辑"""
         prefix = "连续" if is_continuous_op else ""
+        
         # "正在写入..." 日志由调用方 (单次写入方法或开始连续写入方法) 处理
+
+        # 首先尝试构建并记录待发送的写入命令
+        try:
+            # 假设 construct_write_command(data_dict, channel) 返回构建好的命令字节串
+            # data 参数即为包含标签信息的字典
+            command_to_send = construct_write_command(data, channel)
+            if command_to_send:
+                self.log_message.emit(f"准备发送写入命令 (通道 {channel + 1}): {binascii.hexlify(command_to_send).decode('ascii').upper()}")
+            else:
+                # 如果构建命令失败（例如，数据无效），也记录下来
+                self.log_message.emit(f"错误: 无法为通道 {channel + 1} 构建写入命令 (数据: {data})。将尝试通过协议层直接写入。")
+        except Exception as e_construct:
+            self.log_message.emit(f"构建写入命令时发生错误 (通道 {channel + 1}): {str(e_construct)}。将尝试通过协议层直接写入。")
+
+        # 执行实际的写入操作
         try:
             success, message = self.rfid_protocol.write_tag(data, channel)
             
@@ -785,6 +802,18 @@ class RFIDReaderApp(QMainWindow):
         
     def write_tag(self):
         """写入标签"""
+        # First, validate weight_nominal
+        current_weight_text = self.weight_nominal_spin.currentText()
+        if current_weight_text == "选择重量...":
+            QMessageBox.warning(self, "验证失败", "请选择一个有效的标称重量")
+            return
+        
+        try:
+            weight_nominal_value = int(current_weight_text)
+        except ValueError:
+            QMessageBox.warning(self, "错误", f"标称重量值 '{current_weight_text}' 无效，无法转换为数字。")
+            return
+
         # 收集表单数据
         tag_data = {
             'tag_version': self.tag_version_spin.value(),
@@ -792,7 +821,7 @@ class RFIDReaderApp(QMainWindow):
             'material_name': self.material_name_edit.text().strip(), # 去除首尾空格
             'color_name': self.color_name_edit.text().strip(), # 去除首尾空格
             'diameter_target': self.diameter_target_spin.value(),
-            'weight_nominal': int(self.weight_nominal_spin.currentText()), # 从 QComboBox 获取并转为 int
+            'weight_nominal': weight_nominal_value, # 使用经过验证和转换的值
             'print_temp': self.print_temp_spin.value(),
             'bed_temp': self.bed_temp_spin.value(),
             'density': self.density_spin.value()
@@ -800,7 +829,7 @@ class RFIDReaderApp(QMainWindow):
         
         # 定义校验函数
         def is_valid_string_format(text):
-            return bool(re.fullmatch(r"[a-zA-Z0-9\- ]*", text))
+            return bool(re.fullmatch(r"[a-zA-Z0-9 -]*", text))
 
         # 验证必填字段和格式
         if not tag_data['filament_manufacturer']:
@@ -824,18 +853,19 @@ class RFIDReaderApp(QMainWindow):
             QMessageBox.warning(self, "验证失败", "颜色名称只能包含大小写字母、数字和横杠")
             return
             
-        # QSpinBox 和 QComboBox 通常会保证有值，但可以根据需要添加更严格的检查
-        # 例如，确保温度值在合理范围内（虽然SpinBox已经限制了范围）
+        # QSpinBox 通常会保证有值
         if tag_data['diameter_target'] <= 0: # 直径必须大于0
             QMessageBox.warning(self, "验证失败", "目标直径必须大于0")
             return
+            
+        # 标称重量的校验已移到tag_data创建之前
             
         if tag_data['print_temp'] < 170:
             QMessageBox.warning(self, "验证失败", "打印温度不能小于170°C")
             return
 
         # 打印温度和热床温度，QSpinBox 已经有范围限制，一般不需要额外检查是否为空或为0 (除非0是无效值)
-        # 标称重量是从 QComboBox 获取的，也会有值
+        # 标称重量的校验已移到tag_data创建之前
 
         channel_number = self.channel_combo.currentIndex()
 

@@ -114,6 +114,147 @@ def parse_rfid_response(response_bytes: bytes) -> bytes | None:
         print(f"日志：未知的操作状态STA: {sta:#04x}。")
         return None
 
+def construct_write_command(tag_data: dict, channel_data_byte: int) -> bytes | None:
+    """
+    构建指定通道的写入命令。
+    tag_data: 包含要写入标签的完整数据的字典。
+              例如: {
+                  'tag_version': 1000,
+                  'filament_manufacturer': "MINGDA 3D",
+                  'material_name': "PLA",
+                  'color_name': "White",
+                  'diameter_target': 1750,
+                  'weight_nominal': 1000, # 注意：在 main.py 中已转为 int
+                  'print_temp': 210,
+                  'bed_temp': 60,
+                  'density': 1240
+                  # ... 可能还有其他字段，根据您的112字节数据结构
+              }
+    channel_data_byte: 通道的数据字节 (0x00 到 0x07)。
+
+    返回: 构建好的写入命令字节串，如果构建失败则返回 None。
+    
+    注意：您需要根据RFID读写器的具体协议文档来实现此函数。
+    这通常涉及到：
+    1. 确定写入命令的命令码 (CMDC)。
+    2. 将 tag_data 字典中的各个字段按照协议规定的顺序和长度，转换为字节串。
+       - 字符串（如制造商、材料名、颜色名）需要编码（如ASCII），并可能需要填充到固定长度。
+       - 数字（如版本、直径、重量、温度、密度）需要转换为特定字节数和字节序（大端/小端）的整数。
+    3. 将这些字节串与通道号组合成数据区 (DATA)。
+    4. 构建完整的命令帧，通常包括：
+       - 帧头 (FH)
+       - 帧长度 (LEN)
+       - 命令码 (CMDC)
+       - 状态/控制字节 (STA) - 对于发送命令，STA可能固定或根据操作变化
+       - 数据区 (DATA) - 包含通道和要写入的标签数据
+       - 校验码 (BCC) - 根据帧头到数据区的内容计算
+       - 帧尾 (EOF)
+    5. 返回完整的字节串。
+    """
+    print(f"DEBUG: construct_write_command called with channel {channel_data_byte:#04x} and data: {tag_data}")
+
+    # --- 实现占位符 ---
+    # 您需要在此处添加实际的命令构建逻辑。
+    # 以下是一个非常基础的、不完整的示例结构，您需要替换它。
+
+    # 示例：假设命令结构和一些固定值
+    FH = 0xEF
+    CMDC_WRITE = 0x12  # 假设写入命令码是 0x12 (您需要确认实际值)
+    EOF = 0xFE
+
+    # 1. 将 tag_data 字典转换为112字节的数据负载 (payload)
+    #    这需要严格按照您的RFID标签数据格式进行。
+    #    例如：
+    #    tag_version_bytes = tag_data['tag_version'].to_bytes(2, 'big')
+    #    manufacturer_bytes = tag_data['filament_manufacturer'].encode('ascii').ljust(16, b'\\x00')
+    #    ... 等等，直到所有112字节数据都被正确格式化。
+    
+    # --------------------------------------------------------------------------
+    # ！！！重要提示！！！
+    # 下面的 payload_bytes 是一个【不正确】的示例，仅用于演示结构。
+    # 您【必须】根据您的112字节数据格式规范来替换它。
+    # 如果数据格式不正确，写入操作将失败或导致标签数据损坏。
+    # 确保 payload_bytes 最终是 112 字节长。
+    # --------------------------------------------------------------------------
+    payload_bytes_list = []
+    try:
+        # Tag Version (2 bytes, uint16, big-endian)
+        payload_bytes_list.append(int(tag_data.get('tag_version', 0)).to_bytes(2, 'big'))
+        # Filament Manufacturer (16 bytes, ASCII, null-padded)
+        payload_bytes_list.append(str(tag_data.get('filament_manufacturer', '')).encode('ascii', errors='ignore').ljust(16, b'\\x00')[:16])
+        # Material Name (16 bytes, ASCII, null-padded)
+        payload_bytes_list.append(str(tag_data.get('material_name', '')).encode('ascii', errors='ignore').ljust(16, b'\\x00')[:16])
+        # Color Name (32 bytes, ASCII, null-padded)
+        payload_bytes_list.append(str(tag_data.get('color_name', '')).encode('ascii', errors='ignore').ljust(32, b'\\x00')[:32])
+        # Diameter (Target) (2 bytes, uint16, big-endian)
+        payload_bytes_list.append(int(tag_data.get('diameter_target', 0)).to_bytes(2, 'big'))
+        # Weight (Nominal, grams) (2 bytes, uint16, big-endian)
+        payload_bytes_list.append(int(tag_data.get('weight_nominal', 0)).to_bytes(2, 'big'))
+        # Print Temp (C) (2 bytes, uint16, big-endian)
+        payload_bytes_list.append(int(tag_data.get('print_temp', 0)).to_bytes(2, 'big'))
+        # Bed Temp (C) (2 bytes, uint16, big-endian)
+        payload_bytes_list.append(int(tag_data.get('bed_temp', 0)).to_bytes(2, 'big'))
+        # Density (2 bytes, uint16, big-endian)
+        payload_bytes_list.append(int(tag_data.get('density', 0)).to_bytes(2, 'big'))
+
+        # ... 您需要根据您的完整112字节结构，继续添加剩余字段的转换 ...
+        # 例如，如果还有其他字段，继续追加到 payload_bytes_list
+        
+        # 确保最终的 payload 是112字节
+        # 当前已填充: 2+16+16+32+2+2+2+2+2 = 76 字节
+        # 还需要 112 - 76 = 36 字节的填充或实际数据
+        # 这里用空字节填充剩余部分，您应替换为实际数据字段
+        remaining_bytes_to_fill = 112 - sum(len(b) for b in payload_bytes_list)
+        if remaining_bytes_to_fill > 0:
+            payload_bytes_list.append(b'\\x00' * remaining_bytes_to_fill)
+        elif remaining_bytes_to_fill < 0:
+            # 这表示上面的字段定义总长度超过了112字节，是个错误
+            print("错误：定义的标签数据字段总长度超过112字节！请检查 construct_write_command 中的字段定义。")
+            return None
+
+        payload_bytes = b"".join(payload_bytes_list)
+        if len(payload_bytes) != 112:
+            print(f"错误：最终构建的标签数据负载长度为 {len(payload_bytes)}字节，而不是预期的112字节。")
+            return None
+
+    except Exception as e:
+        print(f"错误：在准备写入数据负载时发生异常: {e}")
+        return None
+
+    # 2. 构建数据区 (DATA) = 通道号 (1 byte) + 数据负载 (112 bytes)
+    data_field = bytes([channel_data_byte]) + payload_bytes # 总共 1 + 112 = 113 字节
+
+    # 3. 计算帧长度 (LEN)
+    #    LEN = 长度(FH) + 长度(LEN) + 长度(CMDC) + 长度(DATA) + 长度(BCC) + 长度(EOF)
+    #    LEN = 1 + 1 + 1 + len(data_field) + 1 + 1 = 5 + len(data_field)
+    #    LEN = 5 + 113 = 118 (十进制) = 0x76 (十六进制)
+    frame_len = 5 + len(data_field) 
+
+    # 4. 构建待计算BCC的部分: FH + LEN + CMDC + DATA
+    bcc_calculation_part = bytes([FH, frame_len, CMDC_WRITE]) + data_field
+
+    # 5. 计算BCC (校验和)
+    #    BCC的计算方法需要参考您的协议文档。
+    #    常见的简单方法是异或校验 (XOR sum of bytes) 或 取反的异或校验。
+    #    假设是 "取反的异或校验": BCC = NOT (byte1 ^ byte2 ^ ... ^ byteN)
+    bcc_value = 0
+    for byte_val in bcc_calculation_part:
+        bcc_value ^= byte_val
+    bcc_value = (~bcc_value) & 0xFF  # 取反并确保是单字节
+
+    # 6. 组装完整命令帧
+    command_frame = bytes([FH, frame_len, CMDC_WRITE]) + data_field + bytes([bcc_value, EOF])
+
+    if len(command_frame) != frame_len:
+         print(f"严重错误：最终命令帧长度 {len(command_frame)} 与计算的帧长度 {frame_len} 不匹配！")
+         # return None # 可以选择更严格地在此处返回
+
+    return command_frame
+    # --- 实现占位符结束 ---
+
+    # print("错误: construct_write_command 函数尚未完全实现。请根据协议文档填充逻辑。")
+    # return None
+
 def main():
     # 1. 选择要读取的通道。例如，读取文档中实例的 "第2通道"
     # 根据文档的通道列表， "读取通道2" 对应的 DATA 字节是 0x01。
