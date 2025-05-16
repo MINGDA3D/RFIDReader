@@ -801,6 +801,11 @@ class RFIDReaderApp(QMainWindow):
         
     def write_tag(self):
         """写入标签"""
+        if not self.reader_thread.is_running:
+            self.add_log("读写器未连接")
+            QMessageBox.warning(self, "提示", "请先连接读写器")
+            return
+        
         # First, validate weight_nominal
         current_weight_text = self.weight_nominal_spin.currentText()
         if current_weight_text == "选择重量...":
