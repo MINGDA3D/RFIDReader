@@ -79,82 +79,149 @@ class RFIDProtocol:
         except Exception as e:
             return False, f"读取标签时发生未知异常: {str(e)}"
             
-    def write_tag(self, tag_data): # TODO: 此方法仍使用旧的 _build_packet
-        """写入标签信息"""
-        if not self.serial_port:
-            return False, "串口未设置"
-            
+    def _tag_data_to_bytes(self, tag_data: dict) -> bytes:
+        """
+        将标签数据字典转换为符合RFID编码规则的112字节数据。
+        前76字节根据提供的字段填充，后36字节用0x00填充。
+        """
+        buffer = bytearray()
+        
+        # Tag Version (2 bytes, uint16, big-endian)
+        buffer.extend(struct.pack('>H', int(tag_data.get('tag_version', 0))))
+        
+        # Filament Manufacturer (16 bytes, ASCII, right-padded with \x00)
+        manufacturer = tag_data.get('filament_manufacturer', '')
+        buffer.extend(manufacturer.encode('ascii', errors='ignore')[:16].ljust(16, b'\x00'))
+        
+        # Material Name (16 bytes, ASCII, right-padded with \x00)
+        material_name = tag_data.get('material_name', '')
+        buffer.extend(material_name.encode('ascii', errors='ignore')[:16].ljust(16, b'\x00'))
+        
+        # Color Name (32 bytes, ASCII, right-padded with \x00)
+        color_name = tag_data.get('color_name', '')
+        buffer.extend(color_name.encode('ascii', errors='ignore')[:32].ljust(32, b'\x00'))
+        
+        # Diameter (Target) (2 bytes, uint16, big-endian)
+        buffer.extend(struct.pack('>H', int(tag_data.get('diameter_target', 0))))
+        
+        # Weight (Nominal, grams) (2 bytes, uint16, big-endian)
+        buffer.extend(struct.pack('>H', int(tag_data.get('weight_nominal', 0))))
+        
+        # Print Temp (C) (2 bytes, uint16, big-endian)
+        buffer.extend(struct.pack('>H', int(tag_data.get('print_temp', 0))))
+        
+        # Bed Temp (C) (2 bytes, uint16, big-endian)
+        buffer.extend(struct.pack('>H', int(tag_data.get('bed_temp', 0))))
+        
+        # Density (2 bytes, uint16, big-endian)
+        buffer.extend(struct.pack('>H', int(tag_data.get('density', 0))))
+        
+        # 当前总字节数: 2+16+16+32+2+2+2+2+2 = 76字节
+        # 填充到112字节
+        if len(buffer) < 112:
+            buffer.extend(b'\x00' * (112 - len(buffer)))
+        
+        return bytes(buffer[:112]) #确保正好112字节
+
+    def write_tag(self, tag_data: dict, channel: int): # channel is 0-indexed
+        """写入标签信息，使用 EF...FE 协议"""
+        if not self.serial_port or not self.serial_port.is_open:
+            return False, "串口未连接或未打开"
+
         try:
-            # 将数据转换为字节数据
-            data_bytes = self._tag_data_to_bytes(tag_data) #此方法可能也需适配新协议
+            data_to_write_bytes = self._tag_data_to_bytes(tag_data) # 112字节数据
             
-            # 构建写入标签命令包 - 注意：这里仍使用旧的 _build_packet
-            # 需要修改为符合 EF...FE 协议的写命令构建方式
-            packet = self._build_packet(0x02, data_bytes) # 0x02 是旧的 CMD_WRITE
+            FH = b'\\xEF'
+            LEN_VAL = 6 + len(data_to_write_bytes) # 6 = FH,LEN,CMDC,Channel,BCC,EOF
+            LEN = struct.pack('B', LEN_VAL) # LEN_VAL should be 6 + 112 = 118 (0x76)
+            CMDC = b'\\x12' # 写命令
+            CHANNEL_BYTE = struct.pack('B', channel)
+            EOF = b'\\xFE'
+
+            # 计算BCC
+            temp_frame_part = FH + LEN + CMDC + CHANNEL_BYTE + data_to_write_bytes
+            bcc_val = 0
+            for byte_val in temp_frame_part:
+                bcc_val ^= byte_val
+            BCC = struct.pack('B', (~bcc_val) & 0xFF)
+
+            command_to_send = temp_frame_part + BCC + EOF
+
+            self.serial_port.reset_input_buffer()
+            self.serial_port.reset_output_buffer()
             
-            self.serial_port.write(packet)
-            time.sleep(0.5)
-            
-            if self.serial_port.in_waiting:
-                response = self.serial_port.read(self.serial_port.in_waiting)
-                # _parse_packet 也是旧协议的
-                # result, error = self._parse_packet(response) 
-                # 模拟解析，实际需要按 EF...FE 协议解析写响应
-                if response: # 简化模拟
-                    # 假设写响应的 STA 在特定位置，例如 response[3] for EF...FE
-                    # STA = 0x00 (成功), 0x01 (密码错误), 0x02 (无标签)
-                    # 此处仅为示意，实际解析应更严谨
-                    if len(response) > 3 and response[0] == 0xEF and response[3] == 0x00: # 模拟成功
-                         return True, "标签写入成功 (模拟)"
+            bytes_written = self.serial_port.write(command_to_send)
+            if bytes_written != len(command_to_send):
+                return False, f"串口写入不足: 预期 {len(command_to_send)}, 实际 {bytes_written}"
+
+            time.sleep(0.3) # 等待设备响应
+
+            if self.serial_port.in_waiting > 0:
+                response_bytes = self.serial_port.read(self.serial_port.in_waiting)
+                
+                # 解析响应 (预期7字节: EF, 07, 12, STA, CH, BCC, FE)
+                if len(response_bytes) == 7 and \
+                   response_bytes[0:1] == FH and \
+                   response_bytes[1:2] == b'\\x07' and \
+                   response_bytes[2:3] == CMDC and \
+                   response_bytes[6:7] == EOF:
+                    
+                    # 校验BCC
+                    resp_sta = response_bytes[3]
+                    resp_channel_read = response_bytes[4]
+                    resp_bcc_received = response_bytes[5]
+
+                    bcc_check_data = response_bytes[0:5] # FH, LEN, CMDC, STA, CH
+                    calculated_bcc_val = 0
+                    for b_val in bcc_check_data:
+                        calculated_bcc_val ^= b_val
+                    calculated_bcc_byte = (~calculated_bcc_val) & 0xFF
+                    
+                    if calculated_bcc_byte == resp_bcc_received:
+                        if resp_sta == 0x00:
+                            return True, f"通道 {channel + 1} 写入成功"
+                        elif resp_sta == 0x01:
+                            return False, f"通道 {channel + 1} 写入失败: 块密钥错误/验证失败 (STA=0x01)"
+                        elif resp_sta == 0x02:
+                            return False, f"通道 {channel + 1} 写入失败: 无标签 (STA=0x02)"
+                        else:
+                            return False, f"通道 {channel + 1} 写入失败: 未知状态码 (STA=0x{resp_sta:02X})"
                     else:
-                         return False, f"写入失败或响应异常 (模拟响应: {binascii.hexlify(response).decode('ascii').upper()})"
+                        return False, f"通道 {channel + 1} 写入响应BCC校验失败. Recv: {resp_bcc_received:02X}, Calc: {calculated_bcc_byte:02X}"
                 else:
-                    return False, "写入后无响应"
+                    return False, f"通道 {channel + 1} 写入响应帧格式错误或长度不足. 收到: {binascii.hexlify(response_bytes).decode('ascii').upper()}"
+            else:
+                return False, f"通道 {channel + 1} 写入后无响应或响应超时"
 
-            return True, "标签写入成功 (无响应，模拟)" # Fallback simulation
-            
+        except serial.SerialTimeoutException:
+            return False, f"通道 {channel + 1} 串口写入/读取操作超时"
+        except serial.SerialException as se:
+            return False, f"通道 {channel + 1} 串口通信错误: {str(se)}"
         except Exception as e:
-            return False, f"写入标签异常: {str(e)}"
-            
-    # _parse_tag_data, _tag_data_to_bytes, _get_sample_tag_data
-    # 这些方法与旧的模拟数据或JSON处理有关，可能需要重构或移除
-    # 以适应新的基于字节流和特定字段的RFID编码规则 (如Doc/RFID应用通信协议.md中定义)
-
-    def _tag_data_to_bytes(self, tag_data):
-        """将标签数据转换为字节数据 (旧的JSON实现，需要修改)"""
-        try:
-            json_str = json.dumps(tag_data)
-            return list(json_str.encode('utf-8'))
-        except Exception as e:
-            print(f"转换标签数据异常: {str(e)}")
-            return []
-
-    def _get_sample_tag_data(self):
-        """获取示例标签数据"""
-        tag_id = ''.join([f"{random.randint(0, 15):X}" for _ in range(6)])
-        today = datetime.date.today()
-        issue_date = today.strftime("%Y-%m-%d")
-        expire_date = (today.replace(year=today.year + 1)).strftime("%Y-%m-%d")
-        sample_data = {
-            "tag_id": tag_id,
-            "user_name": random.choice(["张三", "李四", "王五", "赵六", "钱七"]),
-            "user_id": f"UID{random.randint(10000, 99999)}",
-            "department": random.choice(["技术部", "市场部", "人事部", "财务部", "行政部"]),
-            "points": random.randint(0, 5000),
-            "balance": round(random.uniform(0, 500), 2),
-            "issue_date": issue_date,
-            "expire_date": expire_date,
-            "additional_info": "这是一个示例RFID标签数据"
-        }
-        return sample_data
+            return False, f"通道 {channel + 1} 写入标签时发生未知异常: {str(e)}"
 
 if __name__ == "__main__":
-    # 注意: 此处的测试代码可能无法直接工作，因为它没有真实的串口对象
-    # 且依赖于可能已过时或不适用的 RFIDProtocol 内部方法
     protocol = RFIDProtocol() 
-    # success, data = protocol.read_tag(0) # 需要传入 channel
-    # if success:
-    #     print("读取标签成功 (原始字节):", binascii.hexlify(data))
-    # else:
-    #     print(f"读取标签失败: {data}")
-    print("rfid_protocol.py self-test section needs review for current protocol.") 
+    print("rfid_protocol.py self-test section needs review for current protocol.")
+    # 示例: 构造一个模拟的 tag_data
+    # sample_tag_data = {
+    #     'tag_version': 1000,
+    #     'filament_manufacturer': "TestMake",
+    #     'material_name': "TestMat",
+    #     'color_name': "TestColorBlue",
+    #     'diameter_target': 1750,
+    #     'weight_nominal': 1000,
+    #     'print_temp': 210,
+    #     'bed_temp': 60,
+    #     'density': 1240
+    # }
+    # 
+    # # 模拟调用 _tag_data_to_bytes
+    # try:
+    #     byte_data = protocol._tag_data_to_bytes(sample_tag_data)
+    # print(f"Generated byte data ({len(byte_data)} bytes): {binascii.hexlify(byte_data).decode('ascii')}")
+    # except Exception as e:
+    #     print(f"Error in _tag_data_to_bytes test: {e}")
+
+    # 注意: write_tag 和 read_tag 需要一个实际的 serial.Serial 对象进行测试。
+    # print("To test write_tag or read_tag, instantiate RFIDProtocol with a valid serial port.") 

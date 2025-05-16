@@ -241,7 +241,7 @@ class RFIDReaderThread(QThread):
         prefix = "连续" if is_continuous_op else ""
         # "正在写入..." 日志由调用方 (单次写入方法或开始连续写入方法) 处理
         try:
-            success, message = self.rfid_protocol.write_tag(data)
+            success, message = self.rfid_protocol.write_tag(data, channel)
             
             if success:
                 self.log_message.emit(f"成功{prefix}写入通道 {channel+1} 标签: {message}")
