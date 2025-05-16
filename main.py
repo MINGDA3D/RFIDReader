@@ -800,28 +800,28 @@ class RFIDReaderApp(QMainWindow):
         
         # 定义校验函数
         def is_valid_string_format(text):
-            return bool(re.fullmatch(r"[a-zA-Z0-9 ]*", text))
+            return bool(re.fullmatch(r"[a-zA-Z0-9\\- ]*", text))
 
         # 验证必填字段和格式
         if not tag_data['filament_manufacturer']:
             QMessageBox.warning(self, "验证失败", "耗材制造商不能为空")
             return
         if not is_valid_string_format(tag_data['filament_manufacturer']):
-            QMessageBox.warning(self, "验证失败", "耗材制造商只能包含大小写字母、数字和空格")
+            QMessageBox.warning(self, "验证失败", "耗材制造商只能包含大小写字母、数字和横杠")
             return
 
         if not tag_data['material_name']:
             QMessageBox.warning(self, "验证失败", "耗材名称不能为空")
             return
         if not is_valid_string_format(tag_data['material_name']):
-            QMessageBox.warning(self, "验证失败", "耗材名称只能包含大小写字母、数字和空格")
+            QMessageBox.warning(self, "验证失败", "耗材名称只能包含大小写字母、数字和横杠")
             return
 
         if not tag_data['color_name']:
             QMessageBox.warning(self, "验证失败", "颜色名称不能为空")
             return
         if not is_valid_string_format(tag_data['color_name']):
-            QMessageBox.warning(self, "验证失败", "颜色名称只能包含大小写字母、数字和空格")
+            QMessageBox.warning(self, "验证失败", "颜色名称只能包含大小写字母、数字和横杠")
             return
             
         # QSpinBox 和 QComboBox 通常会保证有值，但可以根据需要添加更严格的检查
