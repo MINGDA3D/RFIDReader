@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QSpinBox, QDoubleSpinBox, QTextEdit, QGroupBox, QFrame, 
     QMessageBox, QSplitter, QScrollBar, QCheckBox
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize, QSettings
 from PyQt6.QtGui import QFont, QColor, QIcon, QPalette
 
 # 导入自定义RFID协议模块
@@ -410,6 +410,7 @@ class RFIDReaderApp(QMainWindow):
         
         # 设置主界面
         self.setup_ui()
+        self.load_settings() # 启动时加载设置
         
     def setup_ui(self):
         """设置用户界面"""
@@ -935,6 +936,75 @@ class RFIDReaderApp(QMainWindow):
             # 如果template_data为空 (对应 "选择耗材模板...")，可以选择是否清空表单
             else:
                 self.clear_tag_form() # 调用清空方法
+
+    def closeEvent(self, event):
+        """重写 closeEvent 以在关闭前保存设置"""
+        self.save_settings()
+        super().closeEvent(event)
+
+    def save_settings(self):
+        """保存表单数据到配置文件"""
+        settings = QSettings("MINGDA", "RFIDReaderApp") # 公司名和应用名，用于定位配置文件
+
+        settings.beginGroup("TagForm")
+        settings.setValue("channel_index", self.channel_combo.currentIndex())
+        settings.setValue("material_template_text", self.material_template_combo.currentText()) # 保存文本以便恢复
+        settings.setValue("tag_version", self.tag_version_spin.value())
+        settings.setValue("filament_manufacturer", self.filament_manufacturer_edit.text())
+        settings.setValue("material_name", self.material_name_edit.text())
+        settings.setValue("color_name", self.color_name_edit.text())
+        settings.setValue("diameter_target", self.diameter_target_spin.value())
+        settings.setValue("weight_nominal_text", self.weight_nominal_spin.currentText()) # 保存当前选中的文本
+        settings.setValue("print_temp", self.print_temp_spin.value())
+        settings.setValue("bed_temp", self.bed_temp_spin.value())
+        settings.setValue("density", self.density_spin.value())
+        settings.endGroup()
+        self.add_log("应用程序设置已保存。")
+
+    def load_settings(self):
+        """从配置文件加载表单数据"""
+        settings = QSettings("MINGDA", "RFIDReaderApp")
+
+        settings.beginGroup("TagForm")
+        # 加载通道号
+        channel_index = settings.value("channel_index", 0, type=int) # 默认值为0 (通道1)
+        if 0 <= channel_index < self.channel_combo.count():
+            self.channel_combo.setCurrentIndex(channel_index)
+
+        # 加载耗材模板 - 先尝试恢复选择，如果模板不存在，则不改变
+        material_template_text = settings.value("material_template_text", "选择耗材模板...", type=str)
+        template_index = self.material_template_combo.findText(material_template_text)
+        if template_index != -1:
+            self.material_template_combo.setCurrentIndex(template_index)
+            # 如果加载的不是"选择耗材模板...", 则应用它
+            if material_template_text != "选择耗材模板...":
+                 self.apply_material_template(material_template_text) # 应用模板数据
+        
+        # 只有在没有成功加载并应用有效模板时，才加载单个字段的值
+        # 这样可以避免模板数据被旧的单个字段数据覆盖
+        # 或者，如果希望总是优先加载单个字段，则移除此条件
+        if template_index == -1 or material_template_text == "选择耗材模板...":
+            self.tag_version_spin.setValue(settings.value("tag_version", 1000, type=int))
+            self.filament_manufacturer_edit.setText(settings.value("filament_manufacturer", "MINGDA 3D", type=str))
+            self.material_name_edit.setText(settings.value("material_name", "", type=str))
+            self.color_name_edit.setText(settings.value("color_name", "", type=str))
+            self.diameter_target_spin.setValue(settings.value("diameter_target", 1750, type=int))
+            
+            # 加载标称重量
+            weight_nominal_text = settings.value("weight_nominal_text", "选择重量...", type=str)
+            weight_index = self.weight_nominal_spin.findText(weight_nominal_text)
+            if weight_index != -1:
+                self.weight_nominal_spin.setCurrentIndex(weight_index)
+            elif self.weight_nominal_spin.count() > 0: # 如果找不到保存的值，且有选项，则默认选第一个
+                self.weight_nominal_spin.setCurrentIndex(0)
+
+
+            self.print_temp_spin.setValue(settings.value("print_temp", 210, type=int)) # 默认PLA打印温度
+            self.bed_temp_spin.setValue(settings.value("bed_temp", 60, type=int))     # 默认PLA床温
+            self.density_spin.setValue(settings.value("density", 1240, type=int))     # 默认PLA密度
+
+        settings.endGroup()
+        self.add_log("应用程序设置已加载。")
 
 
 if __name__ == "__main__":
