@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import sys
+import os # <-- 添加 os 导入
 import time
 from datetime import datetime
 import serial
@@ -22,6 +23,16 @@ from PyQt6.QtGui import QFont, QColor, QIcon, QPalette
 
 # 导入自定义RFID协议模块
 from rfid_protocol import RFIDProtocol
+
+# Helper function to get resource path (for PyInstaller)
+def resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".") # os.path.dirname(__file__) is also an option
+    return os.path.join(base_path, relative_path)
 
 class LogPanel(QTextEdit):
     """日志面板组件"""
@@ -401,7 +412,7 @@ class RFIDReaderApp(QMainWindow):
         
         # 设置窗口属性
         self.setWindowTitle("RFID 读写器管理软件")
-        self.setWindowIcon(QIcon("Resources/logo.svg")) # 设置应用图标
+        self.setWindowIcon(QIcon(resource_path("Resources/logo.svg"))) # <-- 修改这里
         self.setMinimumSize(1000, 700)
         self.resize(1440, 900)
         
