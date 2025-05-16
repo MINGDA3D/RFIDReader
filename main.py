@@ -550,6 +550,13 @@ class RFIDReaderApp(QMainWindow):
         connection_layout.addWidget(self.read_button)
         connection_layout.addWidget(self.continuous_write_checkbox)
         connection_layout.addWidget(self.write_button)
+
+        # 添加清空日志按钮
+        self.clear_logs_btn = QPushButton("清空日志")
+        self.clear_logs_btn.setStyleSheet("color: black;")
+        self.clear_logs_btn.setFixedWidth(100)
+        self.clear_logs_btn.clicked.connect(self.clear_log_panel)
+        connection_layout.addWidget(self.clear_logs_btn)
         
     def setup_tag_form(self):
         """设置标签信息表单"""
@@ -894,7 +901,21 @@ class RFIDReaderApp(QMainWindow):
             self.diameter_target_spin.setValue(int(data['diameter_target']))
             
         if 'weight_nominal' in data:
-            self.weight_nominal_spin.setCurrentText(str(data['weight_nominal'])) # 设置 QComboBox 的值
+            current_weight_text = str(data['weight_nominal'])
+            # 确保 QComboBox 中存在该选项，如果不存在，可以考虑是否添加或记录日志
+            index = self.weight_nominal_spin.findText(current_weight_text)
+            if index != -1:
+                self.weight_nominal_spin.setCurrentText(current_weight_text)
+            else:
+                # 如果配置中的重量值不在预设列表中，可以选择添加到列表或记录一个警告
+                # self.weight_nominal_spin.addItem(current_weight_text) # 动态添加
+                # self.weight_nominal_spin.setCurrentText(current_weight_text)
+                self.add_log(f"警告: 从标签读取的重量值 '{current_weight_text}' 不在预设列表中。")
+                # 可以选择将其设置为默认的 "选择重量..."
+                if self.weight_nominal_spin.count() > 0:
+                    self.weight_nominal_spin.setCurrentIndex(0)
+
+
             
         if 'print_temp' in data:
             self.print_temp_spin.setValue(int(data['print_temp']))
@@ -933,9 +954,15 @@ class RFIDReaderApp(QMainWindow):
             template_data = self.DEFAULT_MATERIAL_TEMPLATES[material_name]
             if template_data: # 确保不是空的 "选择耗材模板..."
                 self.update_form_data(template_data)
+                self.add_log(f"已应用耗材模板: {material_name}") # 添加日志记录
             # 如果template_data为空 (对应 "选择耗材模板...")，可以选择是否清空表单
             else:
                 self.clear_tag_form() # 调用清空方法
+
+    def clear_log_panel(self):
+        """清空日志面板"""
+        self.log_panel.clear()
+        self.add_log("日志已清空。")
 
     def closeEvent(self, event):
         """重写 closeEvent 以在关闭前保存设置"""
