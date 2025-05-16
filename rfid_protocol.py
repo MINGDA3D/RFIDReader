@@ -28,9 +28,10 @@ class RFIDProtocol:
     # STATUS_READ_ERROR = 0x03
     # STATUS_WRITE_ERROR = 0x04
     
-    def __init__(self, serial_port=None):
+    def __init__(self, serial_port=None, log_emitter=None):
         """初始化RFID协议处理器"""
         self.serial_port = serial_port
+        self.log_emitter = log_emitter
         
     def set_serial(self, serial_port):
         """设置串口"""
@@ -131,12 +132,12 @@ class RFIDProtocol:
         try:
             data_to_write_bytes = self._tag_data_to_bytes(tag_data) # 112字节数据
             
-            FH = b'\\xEF'
+            FH = b'\xEF'
             LEN_VAL = 6 + len(data_to_write_bytes) # 6 = FH,LEN,CMDC,Channel,BCC,EOF
             LEN = struct.pack('B', LEN_VAL) # LEN_VAL should be 6 + 112 = 118 (0x76)
-            CMDC = b'\\x12' # 写命令
+            CMDC = b'\x12' # 写命令
             CHANNEL_BYTE = struct.pack('B', channel)
-            EOF = b'\\xFE'
+            EOF = b'\xFE'
 
             # 计算BCC
             temp_frame_part = FH + LEN + CMDC + CHANNEL_BYTE + data_to_write_bytes
@@ -146,6 +147,9 @@ class RFIDProtocol:
             BCC = struct.pack('B', (~bcc_val) & 0xFF)
 
             command_to_send = temp_frame_part + BCC + EOF
+
+            if self.log_emitter:
+                self.log_emitter.emit(f"发送写入命令 (通道 {channel + 1}): {binascii.hexlify(command_to_send).decode('ascii').upper()}")
 
             self.serial_port.reset_input_buffer()
             self.serial_port.reset_output_buffer()
@@ -162,7 +166,7 @@ class RFIDProtocol:
                 # 解析响应 (预期7字节: EF, 07, 12, STA, CH, BCC, FE)
                 if len(response_bytes) == 7 and \
                    response_bytes[0:1] == FH and \
-                   response_bytes[1:2] == b'\\x07' and \
+                   response_bytes[1:2] == b'\x07' and \
                    response_bytes[2:3] == CMDC and \
                    response_bytes[6:7] == EOF:
                     

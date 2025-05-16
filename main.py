@@ -58,7 +58,7 @@ class RFIDReaderThread(QThread):
         self.is_running = False
         self.port_name = ""
         self.baud_rate = 115200
-        self.rfid_protocol = RFIDProtocol()
+        self.rfid_protocol = RFIDProtocol(log_emitter=self.log_message)
         
         # 连续操作相关状态
         self.is_performing_continuous_action = False
@@ -242,19 +242,6 @@ class RFIDReaderThread(QThread):
         prefix = "连续" if is_continuous_op else ""
         
         # "正在写入..." 日志由调用方 (单次写入方法或开始连续写入方法) 处理
-
-        # 首先尝试构建并记录待发送的写入命令
-        try:
-            # 假设 construct_write_command(data_dict, channel) 返回构建好的命令字节串
-            # data 参数即为包含标签信息的字典
-            command_to_send = construct_write_command(data, channel)
-            if command_to_send:
-                self.log_message.emit(f"准备发送写入命令 (通道 {channel + 1}): {binascii.hexlify(command_to_send).decode('ascii').upper()}")
-            else:
-                # 如果构建命令失败（例如，数据无效），也记录下来
-                self.log_message.emit(f"错误: 无法为通道 {channel + 1} 构建写入命令 (数据: {data})。将尝试通过协议层直接写入。")
-        except Exception as e_construct:
-            self.log_message.emit(f"构建写入命令时发生错误 (通道 {channel + 1}): {str(e_construct)}。将尝试通过协议层直接写入。")
 
         # 执行实际的写入操作
         try:
