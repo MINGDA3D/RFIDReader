@@ -800,7 +800,7 @@ class RFIDReaderApp(QMainWindow):
         
         # 定义校验函数
         def is_valid_string_format(text):
-            return bool(re.fullmatch(r"[a-zA-Z0-9\\- ]*", text))
+            return bool(re.fullmatch(r"[a-zA-Z0-9\- ]*", text))
 
         # 验证必填字段和格式
         if not tag_data['filament_manufacturer']:
