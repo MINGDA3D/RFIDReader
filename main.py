@@ -122,19 +122,75 @@ class RFIDReaderThread(QThread):
                 # 即使不进行连续操作，也保持线程的响应性
                 time.sleep(0.1)
             
+    def _parse_raw_tag_data(self, raw_data: bytes) -> dict:
+        """将原始标签字节数据解析为字典"""
+        parsed_data = {}
+        if not raw_data or len(raw_data) < 76: # 假设主要数据至少76字节
+            self.log_message.emit(f"原始标签数据过短或为空，无法解析: {raw_data}")
+            return {} # 返回空字典，避免后续错误
+
+        try:
+            # 按照假定的数据结构解析
+            # Tag Version (2 bytes, uint16)
+            parsed_data['tag_version'] = int.from_bytes(raw_data[0:2], 'big') # 假设大端字节序
+
+            # Filament Manufacturer (16 bytes, ASCII)
+            parsed_data['filament_manufacturer'] = raw_data[2:18].decode('ascii', errors='ignore').strip('\x00').strip()
+
+            # Material Name (16 bytes, ASCII)
+            parsed_data['material_name'] = raw_data[18:34].decode('ascii', errors='ignore').strip('\x00').strip()
+
+            # Color Name (32 bytes, ASCII)
+            parsed_data['color_name'] = raw_data[34:66].decode('ascii', errors='ignore').strip('\x00').strip()
+
+            # Diameter (Target) (2 bytes, uint16)
+            parsed_data['diameter_target'] = int.from_bytes(raw_data[66:68], 'big')
+
+            # Weight (Nominal, grams) (2 bytes, uint16)
+            parsed_data['weight_nominal'] = int.from_bytes(raw_data[68:70], 'big')
+
+            # Print Temp (C) (2 bytes, uint16)
+            parsed_data['print_temp'] = int.from_bytes(raw_data[70:72], 'big')
+
+            # Bed Temp (C) (2 bytes, uint16)
+            parsed_data['bed_temp'] = int.from_bytes(raw_data[72:74], 'big')
+            
+            # Density (2 bytes, uint16)
+            parsed_data['density'] = int.from_bytes(raw_data[74:76], 'big')
+            
+            # 您可以根据实际的112字节完整结构，在这里添加更多字段的解析
+            # 例如，如果后面还有数据：
+            # parsed_data['some_other_field'] = raw_data[76:XX]...
+
+            self.log_message.emit("标签数据解析成功")
+            return parsed_data
+
+        except Exception as e:
+            self.log_message.emit(f"解析标签数据时出错: {str(e)}")
+            return {}
+
+
     def _execute_read_tag_once(self, channel, is_continuous_op=False):
         """执行单次标签读取的核心逻辑"""
         prefix = "连续" if is_continuous_op else ""
         # "正在读取..." 日志由调用方 (单次读取方法或开始连续读取方法) 处理
         try:
-            success, result = self.rfid_protocol.read_tag()
+            success, result = self.rfid_protocol.read_tag() # result 是原始字节数据或错误消息
             
             if success:
-                self.data_received.emit(result)
-                self.log_message.emit(f"成功{prefix}读取通道 {channel+1} 标签内容")
-                return True
+                if isinstance(result, bytes): # 确保 result 是字节串
+                    parsed_tag_data = self._parse_raw_tag_data(result)
+                    if parsed_tag_data: # 确保解析成功且数据非空
+                        self.data_received.emit(parsed_tag_data)
+                        self.log_message.emit(f"成功{prefix}读取通道 {channel+1} 标签内容并解析")
+                    else:
+                        self.log_message.emit(f"成功{prefix}读取通道 {channel+1}，但标签数据解析失败或为空")
+                    return True
+                else:
+                    self.log_message.emit(f"{prefix}读取通道 {channel+1} 成功，但返回数据格式不正确: {type(result)}")
+                    return False
             else:
-                self.log_message.emit(f"{prefix}读取通道 {channel+1} 标签失败: {result}")
+                self.log_message.emit(f"{prefix}读取通道 {channel+1} 标签失败: {result}") # result 是错误消息
                 return False
         except Exception as e:
             self.log_message.emit(f"{prefix}读取通道 {channel+1} 标签时出错: {str(e)}")
