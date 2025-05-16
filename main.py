@@ -49,6 +49,7 @@ class RFIDReaderThread(QThread):
     data_received = pyqtSignal(dict)
     log_message = pyqtSignal(str)
     continuous_action_status_changed = pyqtSignal(bool, str) # active, mode ('read', 'write', or '')
+    about_to_read_in_loop = pyqtSignal() # 新增信号，用于在连续读取循环中通知UI清空表单
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -112,6 +113,7 @@ class RFIDReaderThread(QThread):
             if self.is_performing_continuous_action and self.serial_port and self.serial_port.is_open:
                 try:
                     if self.continuous_mode == 'read':
+                        self.about_to_read_in_loop.emit() # 在执行读取前发射信号
                         self._execute_read_tag_once(self.continuous_action_channel, is_continuous_op=True)
                     elif self.continuous_mode == 'write':
                         if self.continuous_action_data: # 确保有数据可写
@@ -404,6 +406,7 @@ class RFIDReaderApp(QMainWindow):
         self.reader_thread.data_received.connect(self.update_form_data)
         self.reader_thread.log_message.connect(self.add_log)
         self.reader_thread.continuous_action_status_changed.connect(self.on_continuous_action_status_changed)
+        self.reader_thread.about_to_read_in_loop.connect(self.clear_tag_form) # 连接新信号到清空表单方法
         
         # 设置主界面
         self.setup_ui()
@@ -605,8 +608,9 @@ class RFIDReaderApp(QMainWindow):
 
         # Weight (Nominal, grams)
         self.weight_nominal_spin = QComboBox() # 更改为 QComboBox
+        self.weight_nominal_spin.addItem("选择重量...") # 添加占位符
         self.weight_nominal_spin.addItems(["1000", "3000", "5000"]) # 添加选项
-        self.weight_nominal_spin.setCurrentText("1000") # 设置默认选项
+        self.weight_nominal_spin.setCurrentIndex(0) # 默认选中占位符
         self.weight_nominal_spin.setToolTip("标称重量 (克)")
         form_layout.addRow(QLabel("标称重量 (g):"), self.weight_nominal_spin)
 
@@ -761,12 +765,14 @@ class RFIDReaderApp(QMainWindow):
             self.reader_thread.stop_continuous_action()
         # 情况2：如果"连续读取"复选框被选中，则开始连续读取
         elif self.continuous_read_checkbox.isChecked():
+            # self.clear_tag_form() # 此处不再需要，由线程信号处理首次清空
             self.reader_thread.start_continuous_read(channel_number)
         # 情况3：执行单次读取
         else:
             # 如果有任何其他连续操作正在进行（比如连续写入），先停止它
             if self.reader_thread.is_performing_continuous_action:
                 self.reader_thread.stop_continuous_action()
+            self.clear_tag_form() # 单次读取前清空表单
             self.reader_thread.read_tag(channel_number)
         
     def write_tag(self):
@@ -898,6 +904,28 @@ class RFIDReaderApp(QMainWindow):
         if 'density' in data:
             self.density_spin.setValue(int(data['density']))
 
+    def clear_tag_form(self):
+        """清空标签信息表单至其最小值或空白状态"""
+        self.tag_version_spin.lineEdit().clear() # 清空视觉显示
+        self.filament_manufacturer_edit.clear() # 清空文本
+        self.material_name_edit.clear()
+        self.color_name_edit.clear()
+        self.diameter_target_spin.lineEdit().clear() # 清空视觉显示
+        
+        # 将标称重量下拉框重置为占位符 (第一个项目)
+        if self.weight_nominal_spin.count() > 0:
+            self.weight_nominal_spin.setCurrentIndex(0)
+        
+        self.print_temp_spin.lineEdit().clear() # 清空视觉显示
+        self.bed_temp_spin.lineEdit().clear() # 清空视觉显示
+        self.density_spin.lineEdit().clear() # 清空视觉显示
+        
+        # 将耗材模板下拉框重置为 "选择耗材模板..." 选项
+        if self.material_template_combo.count() > 0: 
+            self.material_template_combo.setCurrentIndex(0)
+
+        self.add_log("标签信息表单已清空至初始状态")
+
     def apply_material_template(self, material_name):
         """根据选择的耗材模板名称填充表单"""
         if material_name in self.DEFAULT_MATERIAL_TEMPLATES:
@@ -905,8 +933,8 @@ class RFIDReaderApp(QMainWindow):
             if template_data: # 确保不是空的 "选择耗材模板..."
                 self.update_form_data(template_data)
             # 如果template_data为空 (对应 "选择耗材模板...")，可以选择是否清空表单
-            # else:
-            #     self.update_form_data({}) # 传递空字典以触发清空逻辑 (如果已实现)
+            else:
+                self.clear_tag_form() # 调用清空方法
 
 
 if __name__ == "__main__":
