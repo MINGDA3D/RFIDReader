@@ -163,6 +163,10 @@ class RFIDProtocol:
             if self.serial_port.in_waiting > 0:
                 response_bytes = self.serial_port.read(self.serial_port.in_waiting)
                 
+                # 新增：记录写入操作的原始响应字节流
+                if self.log_emitter:
+                    self.log_emitter.emit(f"接收到写入响应帧 (通道 {channel + 1}): {binascii.hexlify(response_bytes).decode('ascii').upper()}")
+                
                 # 解析响应 (预期7字节: EF, 07, 12, STA, CH, BCC, FE)
                 if len(response_bytes) == 7 and \
                    response_bytes[0:1] == FH and \
