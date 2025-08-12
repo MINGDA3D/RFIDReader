@@ -117,7 +117,15 @@ class RFIDProtocol:
         # Density (2 bytes, uint16, big-endian)
         buffer.extend(struct.pack('>H', int(tag_data.get('density', 0))))
         
-        # 当前总字节数: 2+16+16+32+2+2+2+2+2 = 76字节
+        # Serial Number (16 bytes, ASCII, right-padded with \x00) - Optional field
+        serial_number = tag_data.get('serial_number', '')
+        buffer.extend(serial_number.encode('ascii', errors='ignore')[:16].ljust(16, b'\x00'))
+        
+        # Empty Spool Weight (2 bytes, uint16, big-endian) - Optional field
+        buffer.extend(struct.pack('>H', int(tag_data.get('empty_spool_weight', 0))))
+        
+        # 当前总字节数: 2+16+16+32+2+2+2+2+2+16+2 = 94字节
+        # 还有其他可选字段，但暂时先填充0
         # 填充到112字节
         if len(buffer) < 112:
             buffer.extend(b'\x00' * (112 - len(buffer)))

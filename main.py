@@ -174,9 +174,14 @@ class RFIDReaderThread(QThread):
             # Density (2 bytes, uint16)
             parsed_data['density'] = int.from_bytes(raw_data[74:76], 'big')
             
-            # 您可以根据实际的112字节完整结构，在这里添加更多字段的解析
-            # 例如，如果后面还有数据：
-            # parsed_data['some_other_field'] = raw_data[76:XX]...
+            # Serial Number (16 bytes, ASCII)
+            parsed_data['serial_number'] = raw_data[76:92].decode('ascii', errors='replace').rstrip('\x00')
+            
+            # Empty Spool Weight (2 bytes, uint16)
+            parsed_data['empty_spool_weight'] = int.from_bytes(raw_data[92:94], 'big')
+            
+            # 其他可选字段可以继续添加在这里
+            # 剩余字节 (94:112) 为其他可选字段或保留字段
 
             self.log_message.emit("标签数据解析成功")
             return parsed_data
@@ -613,12 +618,14 @@ class RFIDReaderApp(QMainWindow):
         # Material Name
         self.material_name_edit = QLineEdit()
         self.material_name_edit.setMaxLength(16) # Max 16 bytes
+        self.material_name_edit.setText("PLA-HF")  # 设置默认值
         self.material_name_edit.setToolTip("材料名称 (例如: PLA, ABS, PETG, 最多16字符)")
         form_layout.addRow(QLabel("材料名称:"), self.material_name_edit)
 
         # Color Name
         self.color_name_edit = QLineEdit()
         self.color_name_edit.setMaxLength(32) # Max 32 bytes
+        self.color_name_edit.setText("Gray")  # 设置默认值
         self.color_name_edit.setToolTip("颜色名称 (最多32字符)")
         form_layout.addRow(QLabel("颜色名称:"), self.color_name_edit)
 
@@ -634,13 +641,14 @@ class RFIDReaderApp(QMainWindow):
         self.weight_nominal_spin = QComboBox() # 更改为 QComboBox
         self.weight_nominal_spin.addItem("选择重量...") # 添加占位符
         self.weight_nominal_spin.addItems(["1000", "3000", "5000"]) # 添加选项
-        self.weight_nominal_spin.setCurrentIndex(0) # 默认选中占位符
+        self.weight_nominal_spin.setCurrentText("3000") # 设置默认值为3000
         self.weight_nominal_spin.setToolTip("标称重量 (克)")
         form_layout.addRow(QLabel("标称重量 (g):"), self.weight_nominal_spin)
 
         # Print Temp (C)
         self.print_temp_spin = QSpinBox()
         self.print_temp_spin.setRange(0, 400) # e.g., 210 for PLA
+        self.print_temp_spin.setValue(210)  # 设置默认值
         self.print_temp_spin.setSuffix(" °C")
         self.print_temp_spin.setToolTip("推荐打印温度 (°C)")
         form_layout.addRow(QLabel("打印温度 (°C):"), self.print_temp_spin)
@@ -648,6 +656,7 @@ class RFIDReaderApp(QMainWindow):
         # Bed Temp (C)
         self.bed_temp_spin = QSpinBox()
         self.bed_temp_spin.setRange(0, 150) # e.g., 60 for PLA
+        self.bed_temp_spin.setValue(60)  # 设置默认值
         self.bed_temp_spin.setSuffix(" °C")
         self.bed_temp_spin.setToolTip("推荐热床温度 (°C)")
         form_layout.addRow(QLabel("热床温度 (°C):"), self.bed_temp_spin)
@@ -655,9 +664,25 @@ class RFIDReaderApp(QMainWindow):
         # Density
         self.density_spin = QSpinBox()
         self.density_spin.setRange(0, 5000) # e.g., 1240 for 1.240 g/cm^3
+        self.density_spin.setValue(1300)  # 设置默认值
         self.density_spin.setToolTip("耗材密度 (µg/cm³, 例如: 1240 代表 1.240 g/cm³)")
         # Suffix µg/cm³ might be tricky with special characters, could use QLabel instead or simple " (µg/cm³)" in label
         form_layout.addRow(QLabel("密度 (µg/cm³):"), self.density_spin)
+        
+        # Serial Number (Optional)
+        self.serial_number_edit = QLineEdit()
+        self.serial_number_edit.setMaxLength(16) # Max 16 bytes
+        self.serial_number_edit.setText("MDAPL2508120001")  # 设置默认值
+        self.serial_number_edit.setToolTip("序列号/批次ID (可选, 最多16字符)")
+        form_layout.addRow(QLabel("序列号:"), self.serial_number_edit)
+        
+        # Empty Spool Weight (Optional)
+        self.empty_spool_weight_spin = QSpinBox()
+        self.empty_spool_weight_spin.setRange(0, 9999) # up to 9999 grams
+        self.empty_spool_weight_spin.setValue(567)  # 设置默认值
+        self.empty_spool_weight_spin.setSuffix(" g")
+        self.empty_spool_weight_spin.setToolTip("空线轴重量 (克)")
+        form_layout.addRow(QLabel("空线轴重量 (g):"), self.empty_spool_weight_spin)
         
         # 设置表单布局
         self.form_group_box.setLayout(form_layout)
@@ -828,7 +853,9 @@ class RFIDReaderApp(QMainWindow):
             'weight_nominal': weight_nominal_value, # 使用经过验证和转换的值
             'print_temp': self.print_temp_spin.value(),
             'bed_temp': self.bed_temp_spin.value(),
-            'density': self.density_spin.value()
+            'density': self.density_spin.value(),
+            'serial_number': self.serial_number_edit.text().strip(), # 新增序列号
+            'empty_spool_weight': self.empty_spool_weight_spin.value() # 新增空线轴重量
         }
         
         # 定义校验函数
@@ -959,6 +986,12 @@ class RFIDReaderApp(QMainWindow):
             
         if 'density' in data:
             self.density_spin.setValue(int(data['density']))
+            
+        if 'serial_number' in data:
+            self.serial_number_edit.setText(str(data['serial_number']))
+            
+        if 'empty_spool_weight' in data:
+            self.empty_spool_weight_spin.setValue(int(data['empty_spool_weight']))
 
     def clear_tag_form(self):
         """清空标签信息表单至其最小值或空白状态"""
@@ -975,6 +1008,8 @@ class RFIDReaderApp(QMainWindow):
         self.print_temp_spin.lineEdit().clear() # 清空视觉显示
         self.bed_temp_spin.lineEdit().clear() # 清空视觉显示
         self.density_spin.lineEdit().clear() # 清空视觉显示
+        self.serial_number_edit.clear() # 清空序列号
+        self.empty_spool_weight_spin.lineEdit().clear() # 清空空线轴重量
         
         # 将耗材模板下拉框重置为 "选择耗材模板..." 选项
         if self.material_template_combo.count() > 0: 
@@ -1019,6 +1054,8 @@ class RFIDReaderApp(QMainWindow):
         settings.setValue("print_temp", self.print_temp_spin.value())
         settings.setValue("bed_temp", self.bed_temp_spin.value())
         settings.setValue("density", self.density_spin.value())
+        settings.setValue("serial_number", self.serial_number_edit.text())
+        settings.setValue("empty_spool_weight", self.empty_spool_weight_spin.value())
         settings.endGroup()
         self.add_log("应用程序设置已保存。")
 
@@ -1063,6 +1100,8 @@ class RFIDReaderApp(QMainWindow):
             self.print_temp_spin.setValue(settings.value("print_temp", 210, type=int)) # 默认PLA打印温度
             self.bed_temp_spin.setValue(settings.value("bed_temp", 60, type=int))     # 默认PLA床温
             self.density_spin.setValue(settings.value("density", 1240, type=int))     # 默认PLA密度
+            self.serial_number_edit.setText(settings.value("serial_number", "MDAPL2508120001", type=str))
+            self.empty_spool_weight_spin.setValue(settings.value("empty_spool_weight", 567, type=int))
 
         settings.endGroup()
         self.add_log("应用程序设置已加载。")
