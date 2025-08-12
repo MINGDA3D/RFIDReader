@@ -166,10 +166,26 @@ class RFIDProtocol:
             if bytes_written != len(command_to_send):
                 return False, f"串口写入不足: 预期 {len(command_to_send)}, 实际 {bytes_written}"
 
-            time.sleep(0.3) # 等待设备响应
-
-            if self.serial_port.in_waiting > 0:
-                response_bytes = self.serial_port.read(self.serial_port.in_waiting)
+            # 写入操作可能需要更长时间，增加等待并多次检查
+            max_wait_time = 2.0  # 最多等待2秒
+            check_interval = 0.1  # 每100ms检查一次
+            elapsed_time = 0
+            response_bytes = b''
+            
+            while elapsed_time < max_wait_time:
+                time.sleep(check_interval)
+                elapsed_time += check_interval
+                
+                if self.serial_port.in_waiting > 0:
+                    # 读取所有可用数据
+                    response_bytes = self.serial_port.read(self.serial_port.in_waiting)
+                    # 等待一小段时间确保数据完整
+                    time.sleep(0.05)
+                    if self.serial_port.in_waiting > 0:
+                        response_bytes += self.serial_port.read(self.serial_port.in_waiting)
+                    break
+            
+            if response_bytes:
                 
                 # 新增：记录写入操作的原始响应字节流
                 if self.log_emitter:
