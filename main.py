@@ -669,12 +669,22 @@ class RFIDReaderApp(QMainWindow):
         # Suffix µg/cm³ might be tricky with special characters, could use QLabel instead or simple " (µg/cm³)" in label
         form_layout.addRow(QLabel("密度 (µg/cm³):"), self.density_spin)
         
-        # Serial Number (Optional)
+        # Serial Number (Optional) - 创建水平布局包含输入框和下一个按钮
+        serial_layout = QHBoxLayout()
         self.serial_number_edit = QLineEdit()
         self.serial_number_edit.setMaxLength(16) # Max 16 bytes
         self.serial_number_edit.setText("MDAPL2508120001")  # 设置默认值
         self.serial_number_edit.setToolTip("序列号/批次ID (可选, 最多16字符)")
-        form_layout.addRow(QLabel("序列号:"), self.serial_number_edit)
+        serial_layout.addWidget(self.serial_number_edit)
+        
+        # 添加"下一个"按钮
+        self.serial_next_button = QPushButton("下一个")
+        self.serial_next_button.setMaximumWidth(60)
+        self.serial_next_button.setToolTip("序列号最后四位自动加1")
+        self.serial_next_button.clicked.connect(self.increment_serial_number)
+        serial_layout.addWidget(self.serial_next_button)
+        
+        form_layout.addRow(QLabel("序列号:"), serial_layout)
         
         # Empty Spool Weight (Optional)
         self.empty_spool_weight_spin = QSpinBox()
@@ -1038,6 +1048,39 @@ class RFIDReaderApp(QMainWindow):
         self.save_settings()
         super().closeEvent(event)
 
+    def increment_serial_number(self):
+        """序列号最后四位自动加1"""
+        current_serial = self.serial_number_edit.text().strip()
+        
+        if len(current_serial) < 4:
+            # 如果序列号长度不足4位，直接在后面添加0001
+            self.serial_number_edit.setText(current_serial + "0001")
+            self.add_log("序列号已更新为: " + current_serial + "0001")
+            return
+        
+        # 提取前缀和最后四位
+        prefix = current_serial[:-4]
+        last_four = current_serial[-4:]
+        
+        try:
+            # 尝试将最后四位转换为数字
+            number = int(last_four)
+            # 加1，如果超过9999则循环到0000
+            number = (number + 1) % 10000
+            # 格式化为4位数字，不足前面补0
+            new_last_four = f"{number:04d}"
+            new_serial = prefix + new_last_four
+            
+            self.serial_number_edit.setText(new_serial)
+            self.add_log(f"序列号已更新为: {new_serial}")
+            
+        except ValueError:
+            # 如果最后四位不是纯数字，提示用户
+            QMessageBox.warning(self, "警告", 
+                f"序列号最后四位 '{last_four}' 不是纯数字。\n"
+                "请确保序列号格式正确，最后四位应为数字。")
+            self.add_log(f"无法递增序列号：最后四位 '{last_four}' 不是纯数字")
+    
     def save_settings(self):
         """保存表单数据到配置文件"""
         settings = QSettings("MINGDA", "RFIDReaderApp") # 公司名和应用名，用于定位配置文件
